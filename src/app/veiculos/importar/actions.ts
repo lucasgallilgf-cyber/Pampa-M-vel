@@ -57,30 +57,45 @@ function findField(
   return "";
 }
 
-export async function importVehiclesAction(
+/**
+ * Vehicles are imported from a file the browser already uploaded straight to
+ * Vercel Blob storage (see /api/blob-upload) — this action only ever
+ * receives the resulting URL, never the file bytes themselves. That keeps
+ * the request to this server action tiny regardless of spreadsheet size,
+ * sidestepping Vercel's ~4.5MB body limit for serverless functions (which
+ * next.config's bodySizeLimit does not affect).
+ */
+export async function importVehiclesFromUrlAction(
   _prevState: ImportState,
   formData: FormData
 ): Promise<ImportState> {
   await requireUser(["ADMIN"]);
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
+  const fileUrl = formData.get("fileUrl");
+  const fileName = formData.get("fileName");
+  if (typeof fileUrl !== "string" || !fileUrl) {
     return { ...initialState, error: "Selecione um arquivo de planilha (.xlsx, .xls ou .csv)." };
   }
 
   let rawRows: Record<string, unknown>[];
   try {
     const isCsv =
-      file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
-    // CSV needs to go through file.text() so the browser/runtime decodes it
-    // as UTF-8 text first — feeding raw bytes to XLSX.read as type "array"
-    // makes it fall back to a codepage that mangles accented characters
-    // (e.g. "Cuiabá" becomes "CuiabÃ¡"). Binary formats (.xlsx/.xls) don't
-    // have this problem since SheetJS parses their internal UTF-8/UTF-16
-    // encoding directly.
+      typeof fileName === "string" && fileName.toLowerCase().endsWith(".csv");
+    const res = await fetch(fileUrl);
+    if (!res.ok) {
+      return {
+        ...initialState,
+        error: "Não foi possível baixar o arquivo enviado. Tente novamente.",
+      };
+    }
+    // CSV needs to go through res.text() so it's decoded as UTF-8 text first
+    // — feeding raw bytes to XLSX.read as type "array" makes it fall back to
+    // a codepage that mangles accented characters (e.g. "Cuiabá" becomes
+    // "CuiabÃ¡"). Binary formats (.xlsx/.xls) don't have this problem since
+    // SheetJS parses their internal UTF-8/UTF-16 encoding directly.
     const workbook = isCsv
-      ? XLSX.read(await file.text(), { type: "string" })
-      : XLSX.read(await file.arrayBuffer(), { type: "array" });
+      ? XLSX.read(await res.text(), { type: "string" })
+      : XLSX.read(await res.arrayBuffer(), { type: "array" });
     const firstSheetName = workbook.SheetNames[0];
     if (!firstSheetName) {
       return { ...initialState, error: "A planilha não tem nenhuma aba com dados." };

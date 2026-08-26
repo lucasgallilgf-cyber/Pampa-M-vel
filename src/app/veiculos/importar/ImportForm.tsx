@@ -1,18 +1,59 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { importVehiclesAction, ImportState } from "./actions";
+import { useActionState, useState, type FormEvent } from "react";
+import { upload } from "@vercel/blob/client";
+import { importVehiclesFromUrlAction, ImportState } from "./actions";
 
 const initialState: ImportState = { error: null };
 
 export default function ImportForm() {
-  const [state, formAction] = useActionState(importVehiclesAction, initialState);
+  const [state, formAction, isPending] = useActionState(
+    importVehiclesFromUrlAction,
+    initialState
+  );
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setUploadError(null);
+
+    const form = e.currentTarget;
+    const fileInput = form.elements.namedItem("file") as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      setUploadError("Selecione um arquivo de planilha (.xlsx, .xls ou .csv).");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob-upload",
+      });
+      const fd = new FormData();
+      fd.set("fileUrl", blob.url);
+      fd.set("fileName", file.name);
+      formAction(fd);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? `Falha ao enviar o arquivo: ${err.message}`
+          : "Falha ao enviar o arquivo."
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const busy = uploading || isPending;
+  const error = uploadError ?? state.error;
 
   return (
     <div className="space-y-6">
       <form
-        action={formAction}
+        onSubmit={handleSubmit}
         className="rounded-xl border border-slate-200 bg-white p-5"
       >
         <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -39,14 +80,20 @@ export default function ImportForm() {
           reenviar a mesma planilha depois de corrigir erros sem duplicar nada.
         </p>
 
-        {state.error && (
+        {error && (
           <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {state.error}
+            {error}
           </p>
         )}
 
         <div className="mt-4">
-          <SubmitButton />
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {uploading ? "Enviando…" : isPending ? "Importando…" : "Importar"}
+          </button>
         </div>
       </form>
 
@@ -106,18 +153,5 @@ export default function ImportForm() {
         </div>
       )}
     </div>
-  );
-}
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-    >
-      {pending ? "Importando…" : "Importar"}
-    </button>
   );
 }
