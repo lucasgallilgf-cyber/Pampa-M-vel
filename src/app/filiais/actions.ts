@@ -37,11 +37,10 @@ export async function createFilialAction(
 export type DeleteFilialState = { error: string | null };
 
 /**
- * A filial with vehicles or users linked to it is never deleted out from
- * under them — the caller must supply destinoFilialId, and every vehicle
- * and user pointing at the filial being deleted is moved there first, in
- * the same transaction as the delete. A filial with nothing linked (0
- * veículos, 0 usuários) is removed directly, no destino needed.
+ * Simple block-if-linked rule: a filial with any vehicle or user still
+ * pointing at it cannot be deleted — reassign those records to another
+ * filial first (via their own edit forms), then delete. A filial with
+ * nothing linked (0 veículos, 0 usuários) is removed directly.
  */
 export async function deleteFilialAction(
   _prevState: DeleteFilialState,
@@ -49,52 +48,29 @@ export async function deleteFilialAction(
 ): Promise<DeleteFilialState> {
   await requireUser(["ADMIN"]);
   const id = formData.get("id")?.toString();
-  const destinoFilialId = formData.get("destinoFilialId")?.toString() || null;
   if (!id) return { error: "Filial inválida." };
-  if (destinoFilialId && destinoFilialId === id) {
-    return { error: "Escolha uma filial diferente para mover os vínculos." };
+
+  const [vCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(vehicles)
+    .where(eq(vehicles.filialId, id));
+  const [uCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(users)
+    .where(eq(users.filialId, id));
+
+  if (vCount.count > 0 || uCount.count > 0) {
+    return {
+      error:
+        "Esta filial tem veículos ou usuários vinculados — mova-os para outra filial (editando cada um) antes de excluir.",
+    };
   }
 
   try {
-    await db.transaction(async (tx) => {
-      const [vCount] = await tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(vehicles)
-        .where(eq(vehicles.filialId, id));
-      const [uCount] = await tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(users)
-        .where(eq(users.filialId, id));
-      const hasLinks = vCount.count > 0 || uCount.count > 0;
-
-      if (hasLinks) {
-        if (!destinoFilialId) {
-          throw new Error("MOVE_REQUIRED");
-        }
-        await tx
-          .update(vehicles)
-          .set({ filialId: destinoFilialId })
-          .where(eq(vehicles.filialId, id));
-        await tx
-          .update(users)
-          .set({ filialId: destinoFilialId })
-          .where(eq(users.filialId, id));
-      }
-
-      await tx.delete(filiais).where(eq(filiais.id, id));
-    });
+    await db.delete(filiais).where(eq(filiais.id, id));
     revalidatePath("/filiais");
-    revalidatePath("/veiculos");
-    revalidatePath("/usuarios");
   } catch (err) {
     unstable_rethrow(err);
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg === "MOVE_REQUIRED") {
-      return {
-        error:
-          "Esta filial tem veículos ou usuários vinculados — escolha para qual filial mover antes de excluir.",
-      };
-    }
     return { error: "Erro ao excluir filial." };
   }
   return { error: null };

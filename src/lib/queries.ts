@@ -470,6 +470,34 @@ export async function listOccurrencesForCondutor(userId: string) {
     .limit(20);
 }
 
+/**
+ * Counts everything a "limpar dados de exemplo" wipe would remove, so the
+ * confirmation screen can show exactly what's about to be deleted before
+ * the admin types the confirmation phrase. currentUserId is always
+ * excluded from the usuarios count — that account is never touched.
+ */
+export async function getExampleDataSummary(currentUserId: string) {
+  const [[filiaisRow], [veiculosRow], [usuariosRow], [checklistsRow], [ocorrenciasRow]] =
+    await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(filiais),
+      db.select({ count: sql<number>`count(*)::int` }).from(vehicles),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(ne(users.id, currentUserId)),
+      db.select({ count: sql<number>`count(*)::int` }).from(inspections),
+      db.select({ count: sql<number>`count(*)::int` }).from(occurrences),
+    ]);
+
+  return {
+    filiais: filiaisRow.count,
+    veiculos: veiculosRow.count,
+    usuarios: usuariosRow.count,
+    checklists: checklistsRow.count,
+    ocorrencias: ocorrenciasRow.count,
+  };
+}
+
 export async function pendingVehiclesThisMonth(limit = 50) {
   const { start, end } = currentMonthRange();
   const rows = await db

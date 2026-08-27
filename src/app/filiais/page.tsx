@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import { listFiliaisWithCounts } from "@/lib/queries";
@@ -10,11 +11,19 @@ export default async function FiliaisPage() {
 
   return (
     <AppShell session={session}>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">Filiais</h1>
-        <p className="text-sm text-slate-500">
-          Cadastro das filiais da frota.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Filiais</h1>
+          <p className="text-sm text-slate-500">
+            Cadastro das filiais da frota.
+          </p>
+        </div>
+        <Link
+          href="/admin/limpar-dados"
+          className="whitespace-nowrap text-sm text-red-600 hover:underline"
+        >
+          Limpar dados de exemplo
+        </Link>
       </div>
 
       <div className="mb-6">
@@ -47,9 +56,6 @@ export default async function FiliaisPage() {
                     nome={f.nome}
                     veiculos={f.veiculos}
                     usuarios={f.usuarios}
-                    outrasFiliais={filiais
-                      .filter((other) => other.id !== f.id)
-                      .map((other) => ({ id: other.id, nome: other.nome }))}
                   />
                 </td>
               </tr>
