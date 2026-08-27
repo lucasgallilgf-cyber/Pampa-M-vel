@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import { listFiliaisWithCounts } from "@/lib/queries";
 import FilialForm from "./FilialForm";
+import DeleteFilialButton from "./DeleteFilialButton";
 
 export default async function FiliaisPage() {
   const session = await requireUser(["ADMIN"]);
@@ -28,6 +29,7 @@ export default async function FiliaisPage() {
               <th className="px-4 py-2.5">Código</th>
               <th className="px-4 py-2.5">Veículos</th>
               <th className="px-4 py-2.5">Usuários</th>
+              <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -39,12 +41,23 @@ export default async function FiliaisPage() {
                 <td className="px-4 py-2.5 text-slate-600">{f.codigo}</td>
                 <td className="px-4 py-2.5 text-slate-600">{f.veiculos}</td>
                 <td className="px-4 py-2.5 text-slate-600">{f.usuarios}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <DeleteFilialButton
+                    id={f.id}
+                    nome={f.nome}
+                    veiculos={f.veiculos}
+                    usuarios={f.usuarios}
+                    outrasFiliais={filiais
+                      .filter((other) => other.id !== f.id)
+                      .map((other) => ({ id: other.id, nome: other.nome }))}
+                  />
+                </td>
               </tr>
             ))}
             {filiais.length === 0 && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
                   Nenhuma filial cadastrada.

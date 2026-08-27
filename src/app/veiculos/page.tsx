@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import { listVehicles, listFiliais } from "@/lib/queries";
 import { formatKm } from "@/lib/domain";
+import DeleteVehicleButton from "./DeleteVehicleButton";
 
 export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
@@ -150,6 +151,8 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
                       >
                         Editar
                       </Link>
+                      {" · "}
+                      <DeleteVehicleButton id={v.id} placa={v.placa} />
                     </>
                   )}
                 </td>

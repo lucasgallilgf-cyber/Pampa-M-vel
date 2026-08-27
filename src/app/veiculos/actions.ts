@@ -2,9 +2,9 @@
 
 import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { vehicles } from "@/db/schema";
+import { vehicles, inspections, occurrences } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
 export type VehicleFormState = { error: string | null };
@@ -109,4 +109,48 @@ export async function updateVehicleAction(
     return { error: "Erro ao salvar veículo." };
   }
   redirect(`/veiculos/${id}`);
+}
+
+export type DeleteVehicleState = { error: string | null };
+
+/**
+ * Vehicles with any checklist/occurrence history are never hard-deleted —
+ * the FK from inspections/occurrences to vehicles has no cascade, and more
+ * importantly the user explicitly wants that history preserved. Those
+ * vehicles must be deactivated instead (see the "Veículo ativo na frota"
+ * checkbox in updateVehicleAction above). Only a vehicle with zero history
+ * can be removed outright.
+ */
+export async function deleteVehicleAction(
+  _prevState: DeleteVehicleState,
+  formData: FormData
+): Promise<DeleteVehicleState> {
+  await requireUser(["ADMIN"]);
+  const id = formData.get("id")?.toString();
+  if (!id) return { error: "Veículo inválido." };
+
+  const [{ count: inspCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inspections)
+    .where(eq(inspections.vehicleId, id));
+  const [{ count: occCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(occurrences)
+    .where(eq(occurrences.vehicleId, id));
+
+  if (inspCount > 0 || occCount > 0) {
+    return {
+      error:
+        'Este veículo já tem checklist(s) ou ocorrência(s) registrados — não é possível excluir. Edite o veículo e desmarque "Veículo ativo na frota" para retirá-lo de uso sem perder o histórico.',
+    };
+  }
+
+  try {
+    await db.delete(vehicles).where(eq(vehicles.id, id));
+    revalidatePath("/veiculos");
+  } catch (err) {
+    unstable_rethrow(err);
+    return { error: "Erro ao excluir veículo." };
+  }
+  return { error: null };
 }
