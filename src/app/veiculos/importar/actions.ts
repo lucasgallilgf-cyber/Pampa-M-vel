@@ -40,6 +40,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
   filial: ["filial", "unidade", "filialcodigo", "codigofilial"],
   km: ["km", "kmatual", "quilometragem", "kmatualkm"],
   condutor: ["condutor", "motorista", "condutordesignado", "nomedocondutor"],
+  centroCusto: ["centrodecusto", "centrocusto", "cc", "ccusto"],
 };
 
 function findField(
@@ -149,6 +150,7 @@ export async function importVehiclesAction(
     const filialStr = findField(row, "filial");
     const kmStr = findField(row, "km");
     const condutorStr = findField(row, "condutor");
+    const centroCustoStr = findField(row, "centroCusto");
 
     if (!placa || !marca || !modelo || !filialStr) {
       results.push({
@@ -190,6 +192,7 @@ export async function importVehiclesAction(
       filialId: filial.id,
       kmAtual: Number.isNaN(km) ? 0 : km,
       assignedCondutorId: condutorId,
+      centroCusto: centroCustoStr || null,
     });
     results.push({
       linha,

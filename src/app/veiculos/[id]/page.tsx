@@ -62,6 +62,10 @@ export default async function VehicleDetailPage(
           label="Condutor designado"
           value={vehicle.assignedCondutorNome ?? "—"}
         />
+        <StatBox
+          label="Centro de custo"
+          value={vehicle.centroCusto ?? "—"}
+        />
         <StatBox label="Inspeções registradas" value={String(inspections.length)} />
         <StatBox
           label="Ocorrências"

@@ -17,6 +17,7 @@ function parseVehicleForm(formData: FormData) {
   const filialId = formData.get("filialId")?.toString();
   const kmRaw = formData.get("kmAtual")?.toString();
   const assignedCondutorId = formData.get("assignedCondutorId")?.toString() || null;
+  const centroCusto = formData.get("centroCusto")?.toString().trim() || null;
 
   return {
     placa,
@@ -26,6 +27,7 @@ function parseVehicleForm(formData: FormData) {
     filialId,
     kmAtual: kmRaw ? parseInt(kmRaw, 10) : 0,
     assignedCondutorId,
+    centroCusto,
   };
 }
 
@@ -50,6 +52,7 @@ export async function createVehicleAction(
     filialId: parsed.filialId,
     kmAtual: parsed.kmAtual,
     assignedCondutorId: parsed.assignedCondutorId,
+    centroCusto: parsed.centroCusto,
   };
 
   let vehicleId: string;
@@ -91,6 +94,7 @@ export async function updateVehicleAction(
     filialId: parsed.filialId,
     kmAtual: parsed.kmAtual,
     assignedCondutorId: parsed.assignedCondutorId,
+    centroCusto: parsed.centroCusto,
   };
 
   try {

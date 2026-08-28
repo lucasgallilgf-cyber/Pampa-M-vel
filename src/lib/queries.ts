@@ -25,6 +25,7 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
       modelo: vehicles.modelo,
       marca: vehicles.marca,
       kmAtual: vehicles.kmAtual,
+      centroCusto: vehicles.centroCusto,
       filialNome: filiais.nome,
       filialId: vehicles.filialId,
       lastInspectionAt: sql<string | null>`max(${inspections.createdAt})`,
@@ -155,6 +156,7 @@ export async function getVehicleDetail(id: string) {
       filialNome: filiais.nome,
       assignedCondutorId: vehicles.assignedCondutorId,
       assignedCondutorNome: users.name,
+      centroCusto: vehicles.centroCusto,
     })
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))

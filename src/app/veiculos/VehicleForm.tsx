@@ -18,6 +18,7 @@ type ExistingVehicle = {
   filialId: string;
   kmAtual: number;
   assignedCondutorId: string | null;
+  centroCusto?: string | null;
   active: boolean;
 };
 
@@ -133,26 +134,40 @@ export default function VehicleForm({
         </div>
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Condutor designado
-        </label>
-        <select
-          name="assignedCondutorId"
-          defaultValue={vehicle?.assignedCondutorId ?? ""}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-        >
-          <option value="">—</option>
-          {condutores.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-slate-500">
-          Só o condutor designado pode iniciar o checklist deste veículo pelo
-          celular (além de administradores e supervisores).
-        </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Condutor designado
+          </label>
+          <select
+            name="assignedCondutorId"
+            defaultValue={vehicle?.assignedCondutorId ?? ""}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          >
+            <option value="">—</option>
+            {condutores.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Só o condutor designado pode iniciar o checklist deste veículo
+            pelo celular (além de administradores e supervisores).
+          </p>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Centro de custo
+          </label>
+          <input
+            type="text"
+            name="centroCusto"
+            defaultValue={vehicle?.centroCusto ?? ""}
+            placeholder="Ex: 1234"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          />
+        </div>
       </div>
 
       {isEdit && (
