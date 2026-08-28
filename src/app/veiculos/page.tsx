@@ -78,8 +78,83 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
         </form>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
+      {/* Mobile: card list with a prominent checklist button per vehicle —
+          the table below is unreadable and its actions column falls off
+          screen on narrow viewports, so small screens get this instead. */}
+      <div className="space-y-3 md:hidden">
+        {vehicles.map((v) => (
+          <div
+            key={v.id}
+            className="rounded-xl border border-slate-200 bg-white p-4"
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-slate-900">{v.placa}</p>
+                <p className="text-sm text-slate-600">
+                  {v.marca} {v.modelo}
+                </p>
+                <p className="text-xs text-slate-500">{v.filialNome}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                {v.conferidoEsteMes ? (
+                  <Badge className="bg-emerald-50 text-emerald-700 ring-emerald-600/20">
+                    Conferido
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-50 text-amber-700 ring-amber-600/20">
+                    Pendente
+                  </Badge>
+                )}
+                {v.avariasAbertas > 0 && (
+                  <Badge className="bg-red-50 text-red-700 ring-red-600/20">
+                    {v.avariasAbertas} avaria{v.avariasAbertas !== 1 && "s"}
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
+              <p>KM atual: {formatKm(v.kmAtual)}</p>
+              {v.centroCusto && <p>Centro de custo: {v.centroCusto}</p>}
+              {v.condutorNome && <p>Condutor: {v.condutorNome}</p>}
+            </div>
+
+            {canChecklist && (
+              <Link
+                href={`/veiculos/${v.id}/checklist`}
+                className="mb-2 block w-full rounded-lg bg-slate-900 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Iniciar checklist
+              </Link>
+            )}
+
+            <div className="flex items-center justify-between text-sm">
+              <Link
+                href={`/veiculos/${v.id}`}
+                className="font-medium text-slate-700 hover:underline"
+              >
+                Ver detalhes
+              </Link>
+              {isAdmin && (
+                <span className="flex items-center gap-3">
+                  <Link
+                    href={`/veiculos/${v.id}/editar`}
+                    className="font-medium text-slate-700 hover:underline"
+                  >
+                    Editar
+                  </Link>
+                  <DeleteVehicleButton id={v.id} placa={v.placa} />
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop / tablet: full table, scrolls horizontally instead of
+          clipping columns when the viewport is too narrow for all of them. */}
+      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-2.5">Placa</th>
