@@ -86,6 +86,7 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
               <th className="px-4 py-2.5">Modelo</th>
               <th className="px-4 py-2.5">Filial</th>
               <th className="px-4 py-2.5">Centro de custo</th>
+              <th className="px-4 py-2.5">Condutor</th>
               <th className="px-4 py-2.5">KM atual</th>
               <th className="px-4 py-2.5">Status do mês</th>
               <th className="px-4 py-2.5">Avarias abertas</th>
@@ -104,6 +105,9 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
                 <td className="px-4 py-2.5 text-slate-600">{v.filialNome}</td>
                 <td className="px-4 py-2.5 text-slate-600">
                   {v.centroCusto ?? <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-4 py-2.5 text-slate-600">
+                  {v.condutorNome ?? <span className="text-slate-400">—</span>}
                 </td>
                 <td className="px-4 py-2.5 text-slate-600">
                   {formatKm(v.kmAtual)}

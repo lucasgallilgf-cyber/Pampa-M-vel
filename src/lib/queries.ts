@@ -28,12 +28,14 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
       centroCusto: vehicles.centroCusto,
       filialNome: filiais.nome,
       filialId: vehicles.filialId,
+      condutorNome: users.name,
       lastInspectionAt: sql<string | null>`max(${inspections.createdAt})`,
       conferidoEsteMes: sql<boolean>`bool_or(${inspections.createdAt} >= ${start.toISOString()}::timestamptz and ${inspections.createdAt} < ${end.toISOString()}::timestamptz)`,
       avariasAbertas: sql<number>`count(distinct case when ${occurrences.status} != 'RESOLVIDA' then ${occurrences.id} end)::int`,
     })
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
+    .leftJoin(users, eq(vehicles.assignedCondutorId, users.id))
     .leftJoin(inspections, eq(inspections.vehicleId, vehicles.id))
     .leftJoin(occurrences, eq(occurrences.vehicleId, vehicles.id))
     .where(
@@ -44,7 +46,7 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
           : undefined
       )
     )
-    .groupBy(vehicles.id, filiais.nome)
+    .groupBy(vehicles.id, filiais.nome, users.name)
     .orderBy(vehicles.placa);
 
   return rows;
