@@ -58,8 +58,9 @@ export default async function VehicleDetailPage(
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatBox label="KM atual" value={formatKm(vehicle.kmAtual)} />
+        <StatBox label="Condutor" value={vehicle.condutorNome ?? "—"} />
         <StatBox
-          label="Condutor designado"
+          label="Login de condutor (celular)"
           value={vehicle.assignedCondutorNome ?? "—"}
         />
         <StatBox

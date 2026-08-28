@@ -34,14 +34,16 @@ export default function ImportForm() {
           <code className="rounded bg-slate-100 px-1 py-0.5">ano</code>,{" "}
           <code className="rounded bg-slate-100 px-1 py-0.5">filial</code>{" "}
           (nome ou código já cadastrado),{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5">km</code> e{" "}
+          <code className="rounded bg-slate-100 px-1 py-0.5">km</code>,{" "}
           <code className="rounded bg-slate-100 px-1 py-0.5">condutor</code>{" "}
-          (nome completo, opcional — se o nome não bater com nenhum usuário já
-          cadastrado, um usuário Condutor novo é criado automaticamente).
-          Placas já cadastradas não duplicam: se o veículo existente ainda não
-          tiver condutor, ele é vinculado; senão a linha é só ignorada. Pode
-          reenviar a mesma planilha quantas vezes precisar. Tamanho máximo:
-          4MB.
+          (nome completo, opcional — salvo só como texto informativo no
+          veículo, sem criar nem vincular usuário/login) e{" "}
+          <code className="rounded bg-slate-100 px-1 py-0.5">
+            centro de custo
+          </code>{" "}
+          (opcional). Placas já cadastradas não duplicam: a linha é apenas
+          ignorada. Pode reenviar a mesma planilha quantas vezes precisar.
+          Tamanho máximo: 4MB.
         </p>
 
         {state.error && (
@@ -64,12 +66,6 @@ export default function ImportForm() {
             <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
               {state.criados} criado{state.criados !== 1 && "s"}
             </span>
-            {!!state.atualizados && (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                {state.atualizados} condutor vinculado
-                {state.atualizados !== 1 && "s"}
-              </span>
-            )}
             <span className="rounded-full bg-amber-50 px-3 py-1 font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
               {state.duplicados} ignorado{state.duplicados !== 1 && "s"} (já
               existia)
@@ -77,28 +73,7 @@ export default function ImportForm() {
             <span className="rounded-full bg-red-50 px-3 py-1 font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
               {state.comErro} com erro
             </span>
-            {!!state.condutoresCriados && (
-              <span className="rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20">
-                {state.condutoresCriados} condutor
-                {state.condutoresCriados !== 1 && "es"} novo
-                {state.condutoresCriados !== 1 && "s"} cadastrado
-                {state.condutoresCriados !== 1 && "s"}
-              </span>
-            )}
           </div>
-          {!!state.condutoresCriados && (
-            <p className="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
-              {state.condutoresCriados === 1
-                ? "1 condutor da planilha não tinha cadastro e foi criado automaticamente como usuário Condutor"
-                : `${state.condutoresCriados} condutores da planilha não tinham cadastro e foram criados automaticamente como usuários Condutor`}
-              , sem login funcional ainda. Vá em{" "}
-              <a href="/usuarios" className="underline">
-                /usuarios
-              </a>{" "}
-              e defina um e-mail e senha reais para cada um antes que possam
-              entrar pelo celular.
-            </p>
-          )}
           <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-100">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -119,9 +94,6 @@ export default function ImportForm() {
                     <td className="px-3 py-2">
                       {r.status === "criado" && (
                         <span className="text-emerald-700">Criado</span>
-                      )}
-                      {r.status === "atualizado" && (
-                        <span className="text-emerald-700">Condutor vinculado</span>
                       )}
                       {r.status === "duplicado" && (
                         <span className="text-amber-700">Ignorado</span>

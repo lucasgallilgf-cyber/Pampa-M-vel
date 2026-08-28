@@ -19,6 +19,7 @@ type ExistingVehicle = {
   kmAtual: number;
   assignedCondutorId: string | null;
   centroCusto?: string | null;
+  condutorNome?: string | null;
   active: boolean;
 };
 
@@ -137,23 +138,18 @@ export default function VehicleForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            Condutor designado
+            Condutor
           </label>
-          <select
-            name="assignedCondutorId"
-            defaultValue={vehicle?.assignedCondutorId ?? ""}
+          <input
+            type="text"
+            name="condutorNome"
+            defaultValue={vehicle?.condutorNome ?? ""}
+            placeholder="Nome de quem dirige o veículo"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-          >
-            <option value="">—</option>
-            {condutores.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          />
           <p className="mt-1 text-xs text-slate-500">
-            Só o condutor designado pode iniciar o checklist deste veículo
-            pelo celular (além de administradores e supervisores).
+            Só um texto informativo — não precisa ter cadastro de usuário no
+            sistema.
           </p>
         </div>
         <div>
@@ -168,6 +164,29 @@ export default function VehicleForm({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
         </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Login de condutor para o celular (opcional)
+        </label>
+        <select
+          name="assignedCondutorId"
+          defaultValue={vehicle?.assignedCondutorId ?? ""}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+        >
+          <option value="">—</option>
+          {condutores.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          Só necessário se essa pessoa também tiver um usuário cadastrado em{" "}
+          /usuarios e for usar o celular para fazer o checklist deste
+          veículo — não precisa ser a mesma pessoa do campo &quot;Condutor&quot; acima.
+        </p>
       </div>
 
       {isEdit && (

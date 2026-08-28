@@ -83,6 +83,7 @@ export const vehicles = pgTable(
     kmAtual: integer("km_atual").default(0).notNull(),
     assignedCondutorId: text("assigned_condutor_id").references(() => users.id),
     centroCusto: text("centro_custo"),
+    condutorNome: text("condutor_nome"),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

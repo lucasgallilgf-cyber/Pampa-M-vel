@@ -168,6 +168,22 @@ export default function ChecklistForm({
                           </div>
                         </div>
                       )}
+
+                      {itemState.status === "OK" && (
+                        <div className="mt-2">
+                          <label className="mb-1 block text-xs font-medium text-slate-500">
+                            Foto (opcional)
+                          </label>
+                          <input
+                            type="file"
+                            name={`photos_${def.id}`}
+                            accept="image/*"
+                            capture="environment"
+                            multiple
+                            className="block w-full text-xs text-slate-500"
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -28,14 +28,13 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
       centroCusto: vehicles.centroCusto,
       filialNome: filiais.nome,
       filialId: vehicles.filialId,
-      condutorNome: users.name,
+      condutorNome: vehicles.condutorNome,
       lastInspectionAt: sql<string | null>`max(${inspections.createdAt})`,
       conferidoEsteMes: sql<boolean>`bool_or(${inspections.createdAt} >= ${start.toISOString()}::timestamptz and ${inspections.createdAt} < ${end.toISOString()}::timestamptz)`,
       avariasAbertas: sql<number>`count(distinct case when ${occurrences.status} != 'RESOLVIDA' then ${occurrences.id} end)::int`,
     })
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
-    .leftJoin(users, eq(vehicles.assignedCondutorId, users.id))
     .leftJoin(inspections, eq(inspections.vehicleId, vehicles.id))
     .leftJoin(occurrences, eq(occurrences.vehicleId, vehicles.id))
     .where(
@@ -46,7 +45,7 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
           : undefined
       )
     )
-    .groupBy(vehicles.id, filiais.nome, users.name)
+    .groupBy(vehicles.id, filiais.nome)
     .orderBy(vehicles.placa);
 
   return rows;
@@ -159,6 +158,7 @@ export async function getVehicleDetail(id: string) {
       assignedCondutorId: vehicles.assignedCondutorId,
       assignedCondutorNome: users.name,
       centroCusto: vehicles.centroCusto,
+      condutorNome: vehicles.condutorNome,
     })
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
