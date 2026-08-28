@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { submitChecklistAction, ChecklistFormState } from "./actions";
 import { formatKm } from "@/lib/domain";
@@ -20,6 +19,50 @@ type ItemUiState = { status: "OK" | "AVARIA"; notes: string };
 
 const initialState: ChecklistFormState = { error: null };
 
+// Fotos tiradas direto da câmera do celular costumam vir com vários MB cada
+// (às vezes 8-10MB). Enviar várias assim de uma vez em uma conexão de
+// celular é lento e propenso a falhar no meio do envio (aparecendo como
+// "página não carregou", sem nenhum erro do lado do servidor). Por isso,
+// antes de montar o FormData de envio, cada foto é redimensionada e
+// recomprimida no próprio aparelho — isso normalmente reduz o arquivo para
+// algumas centenas de KB, sem perda perceptível de qualidade para o
+// propósito de registrar o estado do veículo.
+async function compressImage(
+  file: File,
+  maxDim = 1600,
+  quality = 0.72
+): Promise<File> {
+  try {
+    if (typeof createImageBitmap !== "function") return file;
+    const bitmap = await createImageBitmap(file, {
+      imageOrientation: "from-image",
+    } as ImageBitmapOptions);
+
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const targetW = Math.max(1, Math.round(bitmap.width * scale));
+    const targetH = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+
+    const blob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", quality)
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const newName = file.name.replace(/\.\w+$/, "") + ".jpg";
+    return new File([blob], newName, { type: "image/jpeg" });
+  } catch {
+    // Se algo der errado ao comprimir (formato não suportado etc.), envia o
+    // arquivo original em vez de bloquear o checklist.
+    return file;
+  }
+}
+
 export default function ChecklistForm({
   vehicle,
   itemDefs,
@@ -29,7 +72,7 @@ export default function ChecklistForm({
   itemDefs: ItemDef[];
   categories: string[];
 }) {
-  const [state, formAction] = useActionState(
+  const [state, formAction, isPending] = useActionState(
     submitChecklistAction,
     initialState
   );
@@ -37,6 +80,7 @@ export default function ChecklistForm({
     Object.fromEntries(itemDefs.map((d) => [d.id, { status: "OK", notes: "" }]))
   );
   const [km, setKm] = useState(String(vehicle.kmAtual));
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const avariaCount = useMemo(
     () => Object.values(items).filter((i) => i.status === "AVARIA").length,
@@ -50,8 +94,31 @@ export default function ChecklistForm({
     setItems((prev) => ({ ...prev, [id]: { ...prev[id], notes } }));
   }
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const original = new FormData(e.currentTarget);
+    setIsCompressing(true);
+    try {
+      const compressed = new FormData();
+      for (const [key, value] of original.entries()) {
+        if (
+          value instanceof File &&
+          value.size > 0 &&
+          value.type.startsWith("image/")
+        ) {
+          compressed.append(key, await compressImage(value));
+        } else {
+          compressed.append(key, value);
+        }
+      }
+      formAction(compressed);
+    } finally {
+      setIsCompressing(false);
+    }
+  }
+
   return (
-    <form action={formAction} className="mx-auto max-w-3xl">
+    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
       <input type="hidden" name="vehicleId" value={vehicle.id} />
 
       <div className="mb-6">
@@ -205,7 +272,7 @@ export default function ChecklistForm({
             </span>
           )}
         </div>
-        <SubmitButton />
+        <SubmitButton compressing={isCompressing} pending={isPending} />
       </div>
 
       {state.error && (
@@ -217,15 +284,21 @@ export default function ChecklistForm({
   );
 }
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+function SubmitButton({
+  compressing,
+  pending,
+}: {
+  compressing: boolean;
+  pending: boolean;
+}) {
+  const busy = compressing || pending;
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={busy}
       className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
     >
-      {pending ? "Salvando…" : "Concluir conferência"}
+      {compressing ? "Preparando fotos…" : pending ? "Salvando…" : "Concluir conferência"}
     </button>
   );
 }
