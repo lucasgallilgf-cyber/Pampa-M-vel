@@ -11,7 +11,12 @@ import {
 
 const initialState: FilialFormState = { error: null };
 
-type ExistingFilial = { id: string; nome: string; codigo: string };
+type ExistingFilial = {
+  id: string;
+  nome: string;
+  codigo: string;
+  empresa?: string | null;
+};
 
 export default function FilialForm({ filial }: { filial?: ExistingFilial }) {
   const isEdit = !!filial;
@@ -53,6 +58,18 @@ export default function FilialForm({ filial }: { filial?: ExistingFilial }) {
             defaultValue={filial?.codigo}
             placeholder="Ex: SRT"
             className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase outline-none focus:border-slate-500"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            Empresa
+          </label>
+          <input
+            type="text"
+            name="empresa"
+            defaultValue={filial?.empresa ?? ""}
+            placeholder="Ex: Pampa Transportes"
+            className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
         </div>
         <SubmitButton isEdit={isEdit} />

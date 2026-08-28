@@ -16,12 +16,13 @@ export async function createFilialAction(
   await requireUser(["ADMIN"]);
   const nome = formData.get("nome")?.toString().trim();
   const codigo = formData.get("codigo")?.toString().trim().toUpperCase();
+  const empresa = formData.get("empresa")?.toString().trim() || null;
   if (!nome || !codigo) {
     return { error: "Preencha nome e código da filial." };
   }
 
   try {
-    await db.insert(filiais).values({ nome, codigo });
+    await db.insert(filiais).values({ nome, codigo, empresa });
     revalidatePath("/filiais");
   } catch (err) {
     unstable_rethrow(err);
@@ -42,12 +43,16 @@ export async function updateFilialAction(
   const id = formData.get("id")?.toString();
   const nome = formData.get("nome")?.toString().trim();
   const codigo = formData.get("codigo")?.toString().trim().toUpperCase();
+  const empresa = formData.get("empresa")?.toString().trim() || null;
   if (!id || !nome || !codigo) {
     return { error: "Preencha nome e código da filial." };
   }
 
   try {
-    await db.update(filiais).set({ nome, codigo }).where(eq(filiais.id, id));
+    await db
+      .update(filiais)
+      .set({ nome, codigo, empresa })
+      .where(eq(filiais.id, id));
     // Editing a filial's código/nome doesn't touch any vehicle or user row —
     // they only store filialId, a foreign key — so this shows up everywhere
     // the filial is referenced (veículos, usuários, dashboard) with no

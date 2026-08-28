@@ -141,4 +141,10 @@ export const INCREMENTAL_MIGRATIONS: { id: string; statements: string[] }[] = [
       `ALTER TABLE "signatures" ADD COLUMN IF NOT EXISTS "signature_image_url" text;`,
     ],
   },
+  {
+    id: "0002_filiais_empresa",
+    statements: [
+      `ALTER TABLE "filiais" ADD COLUMN IF NOT EXISTS "empresa" text;`,
+    ],
+  },
 ];

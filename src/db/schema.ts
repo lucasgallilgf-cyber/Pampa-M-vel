@@ -46,6 +46,7 @@ export const filiais = pgTable("filiais", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   nome: text("nome").notNull(),
   codigo: text("codigo").notNull().unique(),
+  empresa: text("empresa"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

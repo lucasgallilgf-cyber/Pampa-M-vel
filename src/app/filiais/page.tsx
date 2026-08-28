@@ -36,6 +36,7 @@ export default async function FiliaisPage() {
             <tr>
               <th className="px-4 py-2.5">Nome</th>
               <th className="px-4 py-2.5">Código</th>
+              <th className="px-4 py-2.5">Empresa</th>
               <th className="px-4 py-2.5">Veículos</th>
               <th className="px-4 py-2.5">Usuários</th>
               <th className="px-4 py-2.5"></th>
@@ -48,6 +49,9 @@ export default async function FiliaisPage() {
                   {f.nome}
                 </td>
                 <td className="px-4 py-2.5 text-slate-600">{f.codigo}</td>
+                <td className="px-4 py-2.5 text-slate-600">
+                  {f.empresa ?? <span className="text-slate-400">—</span>}
+                </td>
                 <td className="px-4 py-2.5 text-slate-600">{f.veiculos}</td>
                 <td className="px-4 py-2.5 text-slate-600">{f.usuarios}</td>
                 <td className="px-4 py-2.5 text-right">
@@ -70,7 +74,7 @@ export default async function FiliaisPage() {
             {filiais.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
                   Nenhuma filial cadastrada.

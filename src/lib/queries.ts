@@ -64,6 +64,7 @@ export async function listFiliaisWithCounts() {
       id: filiais.id,
       nome: filiais.nome,
       codigo: filiais.codigo,
+      empresa: filiais.empresa,
       veiculos: sql<number>`count(distinct ${vehicles.id})::int`,
       usuarios: sql<number>`count(distinct ${users.id})::int`,
     })
