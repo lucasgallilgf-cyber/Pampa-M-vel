@@ -57,45 +57,48 @@ function findField(
   return "";
 }
 
+// Vercel enforces a hard ~4.5MB request body limit on serverless functions
+// at the platform level — next.config's bodySizeLimit does not affect it.
+// A direct-to-blob client upload was tried to sidestep that, but the
+// browser-to-blob-storage leg of that flow got stuck indefinitely for this
+// user (very likely a network/firewall block on a different domain than
+// the app itself — nothing our server ever sees or logs). Reverted to a
+// plain upload straight to this server action, capped well under the
+// platform limit so it always fits in one request.
+const MAX_IMPORT_FILE_BYTES = 4 * 1024 * 1024; // 4MB
+
 /**
- * Vehicles are imported from a file the browser already uploaded straight to
- * Vercel Blob storage (see /api/blob-upload) — this action only ever
- * receives the resulting URL, never the file bytes themselves. That keeps
- * the request to this server action tiny regardless of spreadsheet size,
- * sidestepping Vercel's ~4.5MB body limit for serverless functions (which
- * next.config's bodySizeLimit does not affect).
+ * Vehicles are imported from a file the browser posts directly to this
+ * server action (multipart/form-data, no separate storage hop).
  */
-export async function importVehiclesFromUrlAction(
+export async function importVehiclesAction(
   _prevState: ImportState,
   formData: FormData
 ): Promise<ImportState> {
   await requireUser(["ADMIN"]);
 
-  const fileUrl = formData.get("fileUrl");
-  const fileName = formData.get("fileName");
-  if (typeof fileUrl !== "string" || !fileUrl) {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
     return { ...initialState, error: "Selecione um arquivo de planilha (.xlsx, .xls ou .csv)." };
+  }
+  if (file.size > MAX_IMPORT_FILE_BYTES) {
+    return {
+      ...initialState,
+      error: `Esse arquivo tem ${(file.size / 1024 / 1024).toFixed(1)}MB — o limite é 4MB. Remova abas/colunas que não sejam necessárias ou divida em planilhas menores.`,
+    };
   }
 
   let rawRows: Record<string, unknown>[];
   try {
-    const isCsv =
-      typeof fileName === "string" && fileName.toLowerCase().endsWith(".csv");
-    const res = await fetch(fileUrl);
-    if (!res.ok) {
-      return {
-        ...initialState,
-        error: "Não foi possível baixar o arquivo enviado. Tente novamente.",
-      };
-    }
-    // CSV needs to go through res.text() so it's decoded as UTF-8 text first
+    const isCsv = file.name.toLowerCase().endsWith(".csv");
+    // CSV needs to go through file.text() so it's decoded as UTF-8 text first
     // — feeding raw bytes to XLSX.read as type "array" makes it fall back to
     // a codepage that mangles accented characters (e.g. "Cuiabá" becomes
     // "CuiabÃ¡"). Binary formats (.xlsx/.xls) don't have this problem since
     // SheetJS parses their internal UTF-8/UTF-16 encoding directly.
     const workbook = isCsv
-      ? XLSX.read(await res.text(), { type: "string" })
-      : XLSX.read(await res.arrayBuffer(), { type: "array" });
+      ? XLSX.read(await file.text(), { type: "string" })
+      : XLSX.read(await file.arrayBuffer(), { type: "array" });
     const firstSheetName = workbook.SheetNames[0];
     if (!firstSheetName) {
       return { ...initialState, error: "A planilha não tem nenhuma aba com dados." };
