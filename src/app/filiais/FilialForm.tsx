@@ -2,12 +2,21 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { createFilialAction, FilialFormState } from "./actions";
+import Link from "next/link";
+import {
+  createFilialAction,
+  updateFilialAction,
+  FilialFormState,
+} from "./actions";
 
 const initialState: FilialFormState = { error: null };
 
-export default function FilialForm() {
-  const [state, formAction] = useActionState(createFilialAction, initialState);
+type ExistingFilial = { id: string; nome: string; codigo: string };
+
+export default function FilialForm({ filial }: { filial?: ExistingFilial }) {
+  const isEdit = !!filial;
+  const action = isEdit ? updateFilialAction : createFilialAction;
+  const [state, formAction] = useActionState(action, initialState);
 
   return (
     <form
@@ -15,8 +24,9 @@ export default function FilialForm() {
       className="rounded-xl border border-slate-200 bg-white p-4"
     >
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Nova filial
+        {isEdit ? "Editar filial" : "Nova filial"}
       </h2>
+      {isEdit && <input type="hidden" name="id" value={filial!.id} />}
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600">
@@ -26,6 +36,7 @@ export default function FilialForm() {
             type="text"
             name="nome"
             required
+            defaultValue={filial?.nome}
             placeholder="Ex: Filial - Sorriso"
             className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
@@ -39,11 +50,20 @@ export default function FilialForm() {
             name="codigo"
             required
             maxLength={10}
+            defaultValue={filial?.codigo}
             placeholder="Ex: SRT"
             className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase outline-none focus:border-slate-500"
           />
         </div>
-        <SubmitButton />
+        <SubmitButton isEdit={isEdit} />
+        {isEdit && (
+          <Link
+            href="/filiais"
+            className="text-sm text-slate-500 hover:underline"
+          >
+            Cancelar
+          </Link>
+        )}
       </div>
       {state.error && (
         <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -54,7 +74,7 @@ export default function FilialForm() {
   );
 }
 
-function SubmitButton() {
+function SubmitButton({ isEdit }: { isEdit: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -62,7 +82,7 @@ function SubmitButton() {
       disabled={pending}
       className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
     >
-      {pending ? "Salvando…" : "Adicionar filial"}
+      {pending ? "Salvando…" : isEdit ? "Salvar alterações" : "Adicionar filial"}
     </button>
   );
 }

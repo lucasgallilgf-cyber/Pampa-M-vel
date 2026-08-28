@@ -34,6 +34,38 @@ export async function createFilialAction(
   redirect("/filiais");
 }
 
+export async function updateFilialAction(
+  _prevState: FilialFormState,
+  formData: FormData
+): Promise<FilialFormState> {
+  await requireUser(["ADMIN"]);
+  const id = formData.get("id")?.toString();
+  const nome = formData.get("nome")?.toString().trim();
+  const codigo = formData.get("codigo")?.toString().trim().toUpperCase();
+  if (!id || !nome || !codigo) {
+    return { error: "Preencha nome e código da filial." };
+  }
+
+  try {
+    await db.update(filiais).set({ nome, codigo }).where(eq(filiais.id, id));
+    // Editing a filial's código/nome doesn't touch any vehicle or user row —
+    // they only store filialId, a foreign key — so this shows up everywhere
+    // the filial is referenced (veículos, usuários, dashboard) with no
+    // further changes needed. Revalidate those listing pages too.
+    revalidatePath("/filiais");
+    revalidatePath("/veiculos");
+    revalidatePath("/usuarios");
+  } catch (err) {
+    unstable_rethrow(err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/unique/i.test(msg)) {
+      return { error: `Já existe uma filial com o código "${codigo}".` };
+    }
+    return { error: "Erro ao salvar filial." };
+  }
+  redirect("/filiais");
+}
+
 export type DeleteFilialState = { error: string | null };
 
 /**

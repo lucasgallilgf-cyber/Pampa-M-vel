@@ -51,6 +51,13 @@ export default async function FiliaisPage() {
                 <td className="px-4 py-2.5 text-slate-600">{f.veiculos}</td>
                 <td className="px-4 py-2.5 text-slate-600">{f.usuarios}</td>
                 <td className="px-4 py-2.5 text-right">
+                  <Link
+                    href={`/filiais/${f.id}/editar`}
+                    className="font-medium text-slate-700 hover:underline"
+                  >
+                    Editar
+                  </Link>
+                  {" · "}
                   <DeleteFilialButton
                     id={f.id}
                     nome={f.nome}

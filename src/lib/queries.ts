@@ -53,6 +53,11 @@ export async function listFiliais() {
   return db.select().from(filiais).orderBy(filiais.nome);
 }
 
+export async function getFilialById(id: string) {
+  const [row] = await db.select().from(filiais).where(eq(filiais.id, id)).limit(1);
+  return row ?? null;
+}
+
 export async function listFiliaisWithCounts() {
   const rows = await db
     .select({
