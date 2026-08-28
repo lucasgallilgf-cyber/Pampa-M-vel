@@ -22,6 +22,13 @@ export default async function ImportarVeiculosPage() {
             em <Link href="/filiais" className="underline">/filiais</Link>{" "}
             antes de importar.
           </p>
+          <a
+            href="/modelo-importacao-veiculos.xlsx"
+            download
+            className="mt-2 inline-block text-sm font-medium text-slate-900 underline"
+          >
+            Baixar modelo de planilha (.xlsx)
+          </a>
         </div>
         <ImportForm />
       </div>
