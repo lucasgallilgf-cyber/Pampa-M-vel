@@ -19,15 +19,15 @@ export default async function LimparDadosPage() {
             Limpar dados de exemplo
           </h1>
           <p className="text-sm text-slate-500">
-            Apaga tudo o que está cadastrado hoje — pensado para usar uma
-            única vez, antes de cadastrar as filiais reais e importar a
-            planilha de veículos. Sua própria conta não é afetada.
+            Escolha abaixo o que apagar — filiais, veículos, usuários e/ou o
+            histórico de checklists e ocorrências. Sua própria conta nunca é
+            afetada.
           </p>
         </div>
 
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Isso vai apagar
+            O que existe hoje
           </h2>
           <ul className="space-y-1 text-sm text-slate-700">
             <li>{summary.filiais} filial(is)</li>

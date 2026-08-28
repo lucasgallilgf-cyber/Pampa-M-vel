@@ -16,32 +16,38 @@ import { requireUser } from "@/lib/auth";
 export type ClearDataState = {
   error: string | null;
   done?: boolean;
+  cleared?: string[];
 };
 
 const CONFIRM_PHRASE = "LIMPAR DADOS";
 
 /**
- * Wipes every filial, vehicle, user (except the admin running this), and
- * their checklist/occurrence/maintenance history — used once, before the
- * real fleet spreadsheet is imported, to clear out the example/test data
- * this app was set up with. checklistItemDefs (the fixed list of checklist
- * questions) is NOT touched — that's app configuration, not example data.
+ * Selective wipe of example/test data, used once before importing the real
+ * fleet spreadsheet. Each checkbox on the form is one of these categories;
+ * the admin picks which to erase. The current admin's own user row is never
+ * touched, and checklistItemDefs (the fixed checklist questionnaire) is app
+ * configuration, never example data — it's never touched either.
  *
- * Deletion order matters: child rows with no ON DELETE CASCADE to their
- * parent must go first, or Postgres rejects the delete with a foreign key
- * violation.
- *   maintenanceRecords -> occurrences (no cascade)
- *   occurrences -> inspections (no cascade) — deleting occurrences also
- *     cascades their signatures and photos automatically (schema-level
- *     onDelete: "cascade" on those two tables)
- *   inspections -> vehicles (no cascade) — deleting inspections also
- *     cascades inspectionItems, which cascades their photos
- *   vehicles -> filiais / users (no cascade)
- *   users -> filiais (no cascade), except the current admin's own row
- *   filiais last
+ * The categories aren't independent in the database: a row can't be deleted
+ * while something still points at it with no ON DELETE CASCADE. Rather than
+ * rejecting a combination that would hit a foreign-key error, we silently
+ * widen the selection to whatever it structurally requires, and report back
+ * exactly what ended up erased so the admin isn't surprised:
+ *   - Filiais requires Veículos and Usuários to go too (both reference
+ *     filialId with no cascade).
+ *   - Veículos requires Checklists to go too (inspections.vehicleId, no
+ *     cascade).
+ *   - Usuários requires Checklists to go too (inspections.performedById, no
+ *     cascade) — since every remaining user but the admin is being removed,
+ *     any inspection performed by one of them would otherwise block it.
+ *   - Checklists requires Ocorrências to go too (occurrences.inspectionId,
+ *     no cascade).
+ * Deleting Ocorrências also cascades their signatures and photos
+ * automatically (schema-level onDelete: "cascade"); deleting Checklists
+ * cascades inspectionItems, which cascades their photos too.
  *
- * Runs in a single transaction: either everything above is gone, or (on
- * any error) nothing is.
+ * Runs in a single transaction: either everything computed above is gone,
+ * or (on any error) nothing is.
  *
  * Note: this does not delete the actual photo/signature files sitting in
  * Vercel Blob storage — only the database rows that reference them. Those
@@ -60,15 +66,62 @@ export async function clearExampleDataAction(
     };
   }
 
+  let filiaisSel = formData.get("filiais") === "on";
+  let veiculosSel = formData.get("veiculos") === "on";
+  let usuariosSel = formData.get("usuarios") === "on";
+  let checklistsSel = formData.get("checklists") === "on";
+  let ocorrenciasSel = formData.get("ocorrencias") === "on";
+
+  if (
+    !filiaisSel &&
+    !veiculosSel &&
+    !usuariosSel &&
+    !checklistsSel &&
+    !ocorrenciasSel
+  ) {
+    return { error: "Selecione ao menos uma categoria para apagar." };
+  }
+
+  // Widen the selection to whatever the foreign keys require.
+  if (filiaisSel) {
+    veiculosSel = true;
+    usuariosSel = true;
+  }
+  if (veiculosSel || usuariosSel) {
+    checklistsSel = true;
+  }
+  if (checklistsSel) {
+    ocorrenciasSel = true;
+  }
+
+  const cleared: string[] = [];
+
   try {
     await db.transaction(async (tx) => {
-      await tx.delete(maintenanceRecords);
-      await tx.delete(occurrences);
-      await tx.delete(inspections);
-      await tx.delete(vehicles);
-      await tx.delete(users).where(ne(users.id, session.id));
-      await tx.delete(filiais);
+      // Order matters: children without ON DELETE CASCADE go before parents.
+      if (ocorrenciasSel) {
+        await tx.delete(maintenanceRecords);
+        await tx.delete(occurrences);
+      }
+      if (checklistsSel) {
+        await tx.delete(inspections);
+      }
+      if (veiculosSel) {
+        await tx.delete(vehicles);
+      }
+      if (usuariosSel) {
+        await tx.delete(users).where(ne(users.id, session.id));
+      }
+      if (filiaisSel) {
+        await tx.delete(filiais);
+      }
     });
+
+    if (filiaisSel) cleared.push("filiais");
+    if (veiculosSel) cleared.push("veículos");
+    if (usuariosSel) cleared.push("usuários");
+    if (checklistsSel) cleared.push("checklists");
+    if (ocorrenciasSel) cleared.push("ocorrências/avarias");
 
     revalidatePath("/filiais");
     revalidatePath("/veiculos");
@@ -80,5 +133,5 @@ export async function clearExampleDataAction(
     return { error: "Erro ao limpar os dados. Nada foi apagado." };
   }
 
-  return { error: null, done: true };
+  return { error: null, done: true, cleared };
 }
