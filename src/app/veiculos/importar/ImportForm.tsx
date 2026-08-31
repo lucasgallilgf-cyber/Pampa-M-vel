@@ -1,19 +1,53 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { importVehiclesAction, ImportState } from "./actions";
 
 const initialState: ImportState = { error: null };
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 
+function tooBigMessage(file: File) {
+  return `Esse arquivo tem ${(file.size / 1024 / 1024).toFixed(
+    1
+  )}MB — o limite é 4MB. Remova abas/colunas que não sejam necessárias ou divida em planilhas menores.`;
+}
+
 export default function ImportForm() {
   const [state, formAction] = useActionState(importVehiclesAction, initialState);
+  // A Vercel corta, no nível de rede, qualquer envio acima de ~4,5MB antes
+  // mesmo de chegar no código do site — nesse caso o navegador só mostra um
+  // erro genérico de "página não carregou", sem nenhuma mensagem amigável.
+  // Por isso o tamanho é checado aqui, assim que o arquivo é escolhido, para
+  // nunca deixar um arquivo grande demais sequer começar a ser enviado.
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file && file.size > MAX_FILE_BYTES) {
+      setClientError(tooBigMessage(file));
+      e.target.value = "";
+    } else {
+      setClientError(null);
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const input = e.currentTarget.elements.namedItem(
+      "file"
+    ) as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (file && file.size > MAX_FILE_BYTES) {
+      e.preventDefault();
+      setClientError(tooBigMessage(file));
+    }
+  }
 
   return (
     <div className="space-y-6">
       <form
         action={formAction}
+        onSubmit={handleSubmit}
         className="rounded-xl border border-slate-200 bg-white p-5"
       >
         <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -24,6 +58,7 @@ export default function ImportForm() {
           name="file"
           accept=".xlsx,.xls,.csv"
           required
+          onChange={handleFileChange}
           className="block w-full text-sm text-slate-600"
         />
         <p className="mt-2 text-xs text-slate-500">
@@ -46,6 +81,11 @@ export default function ImportForm() {
           Tamanho máximo: 4MB.
         </p>
 
+        {clientError && (
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {clientError}
+          </p>
+        )}
         {state.error && (
           <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {state.error}
