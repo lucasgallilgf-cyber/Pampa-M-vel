@@ -86,9 +86,10 @@ export default async function VehicleDetailPage(
               </p>
             )}
             {inspections.map((i) => (
-              <div
+              <Link
                 key={i.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3"
+                href={`/veiculos/${vehicle.id}/checklist/${i.id}`}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-slate-300"
               >
                 <div>
                   <p className="text-sm font-medium text-slate-900">
@@ -112,7 +113,7 @@ export default async function VehicleDetailPage(
                     OK
                   </Badge>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         </section>

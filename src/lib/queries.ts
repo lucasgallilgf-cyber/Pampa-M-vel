@@ -11,7 +11,7 @@ import {
   maintenanceRecords,
   photos,
 } from "@/db/schema";
-import { eq, and, gte, lt, sql, desc, or, ilike, ne } from "drizzle-orm";
+import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
 import { currentMonthRange } from "./domain";
 
 export async function listVehicles(opts: { filialId?: string; q?: string } = {}) {
@@ -248,7 +248,37 @@ export async function getInspectionDetail(id: string) {
     .leftJoin(checklistItemDefs, eq(inspectionItems.itemDefId, checklistItemDefs.id))
     .where(eq(inspectionItems.inspectionId, id));
 
-  return { inspection, items };
+  // As fotos ficam salvas por item do checklist (tanto de itens "OK" quanto
+  // "Avaria") -- so as de avaria tambem aparecem na pagina de Ocorrencia.
+  // Aqui trazemos todas, para exibir o checklist completo com todas as fotos
+  // tiradas na conferencia.
+  const itemIds = items.map((i) => i.id);
+  const itemPhotos =
+    itemIds.length > 0
+      ? await db
+          .select({
+            id: photos.id,
+            url: photos.url,
+            inspectionItemId: photos.inspectionItemId,
+          })
+          .from(photos)
+          .where(inArray(photos.inspectionItemId, itemIds))
+      : [];
+
+  const photosByItem = new Map<string, { id: string; url: string }[]>();
+  for (const p of itemPhotos) {
+    if (!p.inspectionItemId) continue;
+    const list = photosByItem.get(p.inspectionItemId) ?? [];
+    list.push({ id: p.id, url: p.url });
+    photosByItem.set(p.inspectionItemId, list);
+  }
+
+  const itemsWithPhotos = items.map((item) => ({
+    ...item,
+    photos: photosByItem.get(item.id) ?? [],
+  }));
+
+  return { inspection, items: itemsWithPhotos };
 }
 
 export async function listOccurrences(opts: {
