@@ -25,12 +25,19 @@ const initialState: ChecklistFormState = { error: null };
 // "página não carregou", sem nenhum erro do lado do servidor). Por isso,
 // antes de montar o FormData de envio, cada foto é redimensionada e
 // recomprimida no próprio aparelho — isso normalmente reduz o arquivo para
-// algumas centenas de KB, sem perda perceptível de qualidade para o
+// algumas dezenas/centenas de KB, sem perda perceptível de qualidade para o
 // propósito de registrar o estado do veículo.
+//
+// O checklist tem ~26 itens — mesmo comprimida, uma foto em quase todo item
+// ainda pode somar mais do que o limite de ~4,5MB que a Vercel aplica no
+// nível de rede (antes mesmo de o envio chegar no código do site). Por isso
+// o tamanho aqui é mais conservador que o usado na importação de planilha
+// (que lida com um único arquivo), e o total após comprimir também é
+// checado antes de enviar (ver MAX_TOTAL_UPLOAD_BYTES no handleSubmit).
 async function compressImage(
   file: File,
-  maxDim = 1600,
-  quality = 0.72
+  maxDim = 1280,
+  quality = 0.6
 ): Promise<File> {
   try {
     if (typeof createImageBitmap !== "function") return file;
@@ -81,6 +88,7 @@ export default function ChecklistForm({
   );
   const [km, setKm] = useState(String(vehicle.kmAtual));
   const [isCompressing, setIsCompressing] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
 
   const avariaCount = useMemo(
     () => Object.values(items).filter((i) => i.status === "AVARIA").length,
@@ -94,23 +102,46 @@ export default function ChecklistForm({
     setItems((prev) => ({ ...prev, [id]: { ...prev[id], notes } }));
   }
 
+  // Margem de segurança abaixo do limite de ~4,5MB que a Vercel aplica no
+  // nível de rede para o corpo inteiro da requisição (nome dos campos,
+  // fronteiras do multipart etc. também contam, por isso a margem).
+  const MAX_TOTAL_UPLOAD_BYTES = 3.5 * 1024 * 1024;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const original = new FormData(e.currentTarget);
     setIsCompressing(true);
+    setClientError(null);
     try {
       const compressed = new FormData();
+      let totalPhotoBytes = 0;
       for (const [key, value] of original.entries()) {
         if (
           value instanceof File &&
           value.size > 0 &&
           value.type.startsWith("image/")
         ) {
-          compressed.append(key, await compressImage(value));
+          const compressedFile = await compressImage(value);
+          totalPhotoBytes += compressedFile.size;
+          compressed.append(key, compressedFile);
         } else {
           compressed.append(key, value);
         }
       }
+
+      if (totalPhotoBytes > MAX_TOTAL_UPLOAD_BYTES) {
+        setClientError(
+          `As fotos deste checklist somam ${(
+            totalPhotoBytes /
+            1024 /
+            1024
+          ).toFixed(
+            1
+          )}MB, mesmo já compactadas — acima do que dá para enviar de uma vez (limite de rede de ~4MB). Remova algumas fotos (principalmente as de itens marcados como OK, que são opcionais) e tente enviar de novo.`
+        );
+        return;
+      }
+
       formAction(compressed);
     } finally {
       setIsCompressing(false);
@@ -275,6 +306,11 @@ export default function ChecklistForm({
         <SubmitButton compressing={isCompressing} pending={isPending} />
       </div>
 
+      {clientError && (
+        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+          {clientError}
+        </p>
+      )}
       {state.error && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
           {state.error}
