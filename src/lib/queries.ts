@@ -204,6 +204,18 @@ export async function listChecklistItemDefs() {
     .orderBy(checklistItemDefs.order);
 }
 
+/**
+ * Admin management view: every item def (active or not), so a deactivated
+ * item stays visible with a way to bring it back. Ordered by category then
+ * order so it reads the same way the checklist itself is grouped.
+ */
+export async function listAllChecklistItemDefs() {
+  return db
+    .select()
+    .from(checklistItemDefs)
+    .orderBy(checklistItemDefs.category, checklistItemDefs.order);
+}
+
 export async function getInspectionDetail(id: string) {
   const [inspection] = await db
     .select({

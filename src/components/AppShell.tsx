@@ -42,6 +42,11 @@ const NAV_ITEMS: {
     label: "Filiais",
     roles: ["ADMIN"],
   },
+  {
+    href: "/checklist-itens",
+    label: "Itens de checklist",
+    roles: ["ADMIN"],
+  },
 ];
 
 export default function AppShell({
