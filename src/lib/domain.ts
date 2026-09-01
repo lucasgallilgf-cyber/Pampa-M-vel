@@ -83,6 +83,27 @@ export const CHECKLIST_CATEGORIES: { category: string; items: string[] }[] = [
   },
 ];
 
+export const REVISION_STATUS_LABELS = {
+  PENDENTE: "Pendente",
+  FEITO: "Feito",
+} as const;
+
+export const REVISION_STATUS_STYLES = {
+  PENDENTE: "bg-red-50 text-red-700 ring-red-600/20",
+  FEITO: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+} as const;
+
+// Intervalo de revisão preventiva: a cada 10.000 km (10k, 20k, 30k...).
+export const REVISION_INTERVAL_KM = 10000;
+
+/** Próximo marco de revisão (múltiplo de 10.000) a partir do km atual. */
+export function nextRevisionKm(kmAtual: number): number {
+  return Math.max(
+    REVISION_INTERVAL_KM,
+    Math.ceil(kmAtual / REVISION_INTERVAL_KM) * REVISION_INTERVAL_KM
+  );
+}
+
 export function formatKm(km: number): string {
   return `${km.toLocaleString("pt-BR")} km`;
 }

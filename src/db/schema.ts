@@ -42,6 +42,11 @@ export const signatureRoleEnum = pgEnum("signature_role", [
   "GERENTE",
 ]);
 
+export const revisionStatusEnum = pgEnum("revision_status", [
+  "PENDENTE",
+  "FEITO",
+]);
+
 export const filiais = pgTable("filiais", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   nome: text("nome").notNull(),
@@ -260,6 +265,37 @@ export const signatureLinks = pgTable(
       t.occurrenceId,
       t.role
     ),
+  ]
+);
+
+/**
+ * Controle de revisões preventivas por quilometragem — uma linha por marco
+ * de 10.000 km atingido/a atingir por veículo (10k, 20k, 30k...). A "próxima
+ * revisão" de cada veículo é sempre calculada em código a partir do
+ * vehicles.kmAtual (não fica guardada aqui); esta tabela só existe pra
+ * registrar o status (feito/pendente) e os detalhes de cada marco
+ * específico — se não houver linha aqui pra um marco, ele é tratado como
+ * pendente e sem observação.
+ */
+export const vehicleRevisions = pgTable(
+  "vehicle_revisions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    vehicleId: text("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "cascade" }),
+    kmAlvo: integer("km_alvo").notNull(),
+    status: revisionStatusEnum("status").default("PENDENTE").notNull(),
+    dataRevisao: timestamp("data_revisao"),
+    kmRevisao: integer("km_revisao"),
+    observacao: text("observacao"),
+    updatedById: text("updated_by_id").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("vehicle_revisions_vehicle_km_idx").on(t.vehicleId, t.kmAlvo),
+    index("vehicle_revisions_vehicle_idx").on(t.vehicleId),
   ]
 );
 

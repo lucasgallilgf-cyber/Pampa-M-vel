@@ -13,6 +13,7 @@ import {
   photos,
   userFiliais,
   vehicleTransfers,
+  vehicleRevisions,
 } from "@/db/schema";
 import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
@@ -963,4 +964,90 @@ export async function pendingVehiclesThisMonth(limit = 50) {
     .orderBy(vehicles.placa)
     .limit(limit);
   return rows;
+}
+
+/**
+ * Veículos ativos pro painel de Revisões — filial/placa aqui, o marco de
+ * revisão (10k, 20k...) e o status feito/pendente são calculados/buscados à
+ * parte (ver nextRevisionKm em domain.ts e listVehicleRevisionsFor abaixo),
+ * já que dependem do kmAtual de cada veículo, que muda a cada checklist.
+ */
+export async function listVehiclesForRevisions(
+  opts: { filialId?: string; q?: string } = {}
+) {
+  const { filialId, q } = opts;
+  const rows = await db
+    .select({
+      id: vehicles.id,
+      placa: vehicles.placa,
+      modelo: vehicles.modelo,
+      marca: vehicles.marca,
+      kmAtual: vehicles.kmAtual,
+      filialId: vehicles.filialId,
+      filialNome: filiais.nome,
+      centroCusto: vehicles.centroCusto,
+    })
+    .from(vehicles)
+    .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
+    .where(
+      and(
+        eq(vehicles.active, true),
+        filialId ? eq(vehicles.filialId, filialId) : undefined,
+        q
+          ? or(ilike(vehicles.placa, `%${q}%`), ilike(vehicles.modelo, `%${q}%`))
+          : undefined
+      )
+    )
+    .orderBy(vehicles.placa);
+  return rows;
+}
+
+/** Todas as linhas de revisão (qualquer marco) dos veículos informados. */
+export async function listVehicleRevisionsFor(vehicleIds: string[]) {
+  if (vehicleIds.length === 0) return [];
+  return db
+    .select()
+    .from(vehicleRevisions)
+    .where(inArray(vehicleRevisions.vehicleId, vehicleIds));
+}
+
+/**
+ * Cria ou atualiza a linha de revisão de um veículo pra um marco específico
+ * (vehicleId + kmAlvo é único — ver índice na tabela). Usado tanto pra
+ * marcar como feito (com data/km/observação) quanto só pra editar a
+ * observação de um marco ainda pendente.
+ */
+export async function upsertVehicleRevision(params: {
+  vehicleId: string;
+  kmAlvo: number;
+  status: "PENDENTE" | "FEITO";
+  dataRevisao: Date | null;
+  kmRevisao: number | null;
+  observacao: string | null;
+  updatedById: string;
+}) {
+  const { vehicleId, kmAlvo, status, dataRevisao, kmRevisao, observacao, updatedById } =
+    params;
+  await db
+    .insert(vehicleRevisions)
+    .values({
+      vehicleId,
+      kmAlvo,
+      status,
+      dataRevisao,
+      kmRevisao,
+      observacao,
+      updatedById,
+    })
+    .onConflictDoUpdate({
+      target: [vehicleRevisions.vehicleId, vehicleRevisions.kmAlvo],
+      set: {
+        status,
+        dataRevisao,
+        kmRevisao,
+        observacao,
+        updatedById,
+        updatedAt: new Date(),
+      },
+    });
 }

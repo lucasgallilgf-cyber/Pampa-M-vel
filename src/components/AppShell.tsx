@@ -33,6 +33,11 @@ const NAV_ITEMS: {
     roles: ["ADMIN", "GERENTE", "SUPERVISOR"],
   },
   {
+    href: "/revisoes",
+    label: "Revisões",
+    roles: ["ADMIN", "GERENTE", "SUPERVISOR"],
+  },
+  {
     href: "/usuarios",
     label: "Usuários",
     roles: ["ADMIN"],

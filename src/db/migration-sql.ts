@@ -250,4 +250,32 @@ export const INCREMENTAL_MIGRATIONS: { id: string; statements: string[] }[] = [
       `CREATE UNIQUE INDEX IF NOT EXISTS "signature_links_occurrence_role_idx" ON "signature_links" USING btree ("occurrence_id","role");`,
     ],
   },
+  {
+    id: "0010_vehicle_revisions",
+    statements: [
+      `DO $$ BEGIN
+        CREATE TYPE "revision_status" AS ENUM ('PENDENTE', 'FEITO');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `CREATE TABLE IF NOT EXISTS "vehicle_revisions" (
+        "id" text PRIMARY KEY NOT NULL,
+        "vehicle_id" text NOT NULL,
+        "km_alvo" integer NOT NULL,
+        "status" "revision_status" DEFAULT 'PENDENTE' NOT NULL,
+        "data_revisao" timestamp,
+        "km_revisao" integer,
+        "observacao" text,
+        "updated_by_id" text,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_revisions" ADD CONSTRAINT "vehicle_revisions_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE cascade ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_revisions" ADD CONSTRAINT "vehicle_revisions_updated_by_id_users_id_fk" FOREIGN KEY ("updated_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "vehicle_revisions_vehicle_km_idx" ON "vehicle_revisions" USING btree ("vehicle_id","km_alvo");`,
+      `CREATE INDEX IF NOT EXISTS "vehicle_revisions_vehicle_idx" ON "vehicle_revisions" USING btree ("vehicle_id");`,
+    ],
+  },
 ];
