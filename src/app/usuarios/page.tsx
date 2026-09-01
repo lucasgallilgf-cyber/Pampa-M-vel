@@ -33,7 +33,7 @@ export default async function UsuariosPage() {
               <th className="px-4 py-2.5">Nome</th>
               <th className="px-4 py-2.5">E-mail</th>
               <th className="px-4 py-2.5">Perfil</th>
-              <th className="px-4 py-2.5">Filial</th>
+              <th className="px-4 py-2.5">Filiais</th>
               <th className="px-4 py-2.5">Status</th>
               <th className="px-4 py-2.5"></th>
             </tr>
@@ -50,6 +50,12 @@ export default async function UsuariosPage() {
                 </td>
                 <td className="px-4 py-2.5 text-slate-600">
                   {u.filialNome ?? "—"}
+                  {u.outrasFiliais.length > 0 && (
+                    <span className="text-slate-400">
+                      {" "}
+                      + {u.outrasFiliais.join(", ")}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-2.5">
                   {u.active ? (

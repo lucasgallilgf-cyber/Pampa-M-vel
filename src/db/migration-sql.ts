@@ -159,4 +159,21 @@ export const INCREMENTAL_MIGRATIONS: { id: string; statements: string[] }[] = [
       `ALTER TABLE "vehicles" ADD COLUMN IF NOT EXISTS "condutor_nome" text;`,
     ],
   },
+  {
+    id: "0005_user_filiais",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "user_filiais" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL,
+        "filial_id" text NOT NULL
+      );`,
+      `DO $$ BEGIN
+        ALTER TABLE "user_filiais" ADD CONSTRAINT "user_filiais_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN
+        ALTER TABLE "user_filiais" ADD CONSTRAINT "user_filiais_filial_id_filiais_id_fk" FOREIGN KEY ("filial_id") REFERENCES "public"."filiais"("id") ON DELETE cascade ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "user_filiais_user_filial_idx" ON "user_filiais" USING btree ("user_id","filial_id");`,
+    ],
+  },
 ];

@@ -7,6 +7,7 @@ import { hashSync } from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { setUserFiliaisAdicionais } from "@/lib/queries";
 
 export type UserFormState = { error: string | null };
 
@@ -34,14 +35,20 @@ export async function createUserAction(
     return { error: "Perfil inválido." };
   }
 
+  const filiaisAdicionais = formData.getAll("filiaisAdicionais").map((v) => v.toString());
+
   try {
-    await db.insert(users).values({
-      name,
-      email,
-      passwordHash: hashSync(password, 10),
-      role: role as (typeof ROLES)[number],
-      filialId,
-    });
+    const [created] = await db
+      .insert(users)
+      .values({
+        name,
+        email,
+        passwordHash: hashSync(password, 10),
+        role: role as (typeof ROLES)[number],
+        filialId,
+      })
+      .returning({ id: users.id });
+    await setUserFiliaisAdicionais(created.id, filiaisAdicionais);
     revalidatePath("/usuarios");
   } catch (err) {
     unstable_rethrow(err);
@@ -78,6 +85,8 @@ export async function updateUserAction(
     return { error: "A senha precisa ter pelo menos 6 caracteres." };
   }
 
+  const filiaisAdicionais = formData.getAll("filiaisAdicionais").map((v) => v.toString());
+
   try {
     await db
       .update(users)
@@ -90,6 +99,7 @@ export async function updateUserAction(
         ...(password ? { passwordHash: hashSync(password, 10) } : {}),
       })
       .where(eq(users.id, id));
+    await setUserFiliaisAdicionais(id, filiaisAdicionais);
     revalidatePath("/usuarios");
   } catch (err) {
     unstable_rethrow(err);

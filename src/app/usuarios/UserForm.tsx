@@ -21,9 +21,11 @@ type ExistingUser = {
 export default function UserForm({
   filiais,
   user,
+  outrasFiliaisIds = [],
 }: {
   filiais: Filial[];
   user?: ExistingUser;
+  outrasFiliaisIds?: string[];
 }) {
   const action = user ? updateUserAction : createUserAction;
   const [state, formAction] = useActionState(action, initialState);
@@ -96,7 +98,7 @@ export default function UserForm({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            Filial
+            Filial principal
           </label>
           <select
             name="filialId"
@@ -110,6 +112,33 @@ export default function UserForm({
               </option>
             ))}
           </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Outras filiais que este usuário também gerencia (opcional)
+        </label>
+        <p className="mb-2 text-xs text-slate-500">
+          Só para deixar registrado no cadastro — não muda o que o usuário
+          consegue ver ou fazer no sistema.
+        </p>
+        <div className="grid max-h-48 grid-cols-2 gap-x-3 gap-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 sm:grid-cols-3">
+          {filiais.map((f) => (
+            <label
+              key={f.id}
+              className="flex items-center gap-2 text-sm text-slate-700"
+            >
+              <input
+                type="checkbox"
+                name="filiaisAdicionais"
+                value={f.id}
+                defaultChecked={outrasFiliaisIds.includes(f.id)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              {f.nome}
+            </label>
+          ))}
         </div>
       </div>
 

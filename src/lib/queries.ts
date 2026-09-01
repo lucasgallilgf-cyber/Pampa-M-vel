@@ -10,6 +10,7 @@ import {
   signatures,
   maintenanceRecords,
   photos,
+  userFiliais,
 } from "@/db/schema";
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
 import { currentMonthRange } from "./domain";
@@ -127,7 +128,7 @@ export async function listFiliaisWithCounts() {
 
 export async function listUsers(opts: { role?: string } = {}) {
   const { role } = opts;
-  return db
+  const rows = await db
     .select({
       id: users.id,
       name: users.name,
@@ -146,11 +147,58 @@ export async function listUsers(opts: { role?: string } = {}) {
         : undefined
     )
     .orderBy(users.name);
+
+  // Filiais adicionais (além da principal) que cada usuário também atende —
+  // ver comentário em userFiliais no schema. Buscado à parte e mesclado em
+  // memória para não duplicar linhas de usuário por filial extra.
+  const extraRows = await db
+    .select({
+      userId: userFiliais.userId,
+      filialNome: filiais.nome,
+    })
+    .from(userFiliais)
+    .leftJoin(filiais, eq(userFiliais.filialId, filiais.id));
+
+  const extraByUser = new Map<string, string[]>();
+  for (const r of extraRows) {
+    if (!r.filialNome) continue;
+    const list = extraByUser.get(r.userId) ?? [];
+    list.push(r.filialNome);
+    extraByUser.set(r.userId, list);
+  }
+
+  return rows.map((u) => ({
+    ...u,
+    outrasFiliais: extraByUser.get(u.id) ?? [],
+  }));
 }
 
 export async function getUserById(id: string) {
   const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return row ?? null;
+}
+
+export async function listUserFiliaisIds(userId: string) {
+  const rows = await db
+    .select({ filialId: userFiliais.filialId })
+    .from(userFiliais)
+    .where(eq(userFiliais.userId, userId));
+  return rows.map((r) => r.filialId);
+}
+
+/**
+ * Substitui por completo o conjunto de filiais adicionais de um usuário
+ * (fora a filial principal em users.filialId). Chamado ao criar/editar um
+ * usuário — apaga o que existia e insere a nova seleção do formulário.
+ */
+export async function setUserFiliaisAdicionais(
+  userId: string,
+  filialIds: string[]
+) {
+  await db.delete(userFiliais).where(eq(userFiliais.userId, userId));
+  const unique = Array.from(new Set(filialIds)).filter(Boolean);
+  if (unique.length === 0) return;
+  await db.insert(userFiliais).values(unique.map((filialId) => ({ userId, filialId })));
 }
 
 export async function listCondutores() {

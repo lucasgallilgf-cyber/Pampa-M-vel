@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
-import { listFiliais, getUserById } from "@/lib/queries";
+import { listFiliais, getUserById, listUserFiliaisIds } from "@/lib/queries";
 import UserForm from "../../UserForm";
 
 export default async function EditarUsuarioPage(
@@ -10,7 +10,11 @@ export default async function EditarUsuarioPage(
 ) {
   const session = await requireUser(["ADMIN"]);
   const { id } = await props.params;
-  const [filiais, user] = await Promise.all([listFiliais(), getUserById(id)]);
+  const [filiais, user, outrasFiliaisIds] = await Promise.all([
+    listFiliais(),
+    getUserById(id),
+    listUserFiliaisIds(id),
+  ]);
   if (!user) notFound();
 
   return (
@@ -23,7 +27,7 @@ export default async function EditarUsuarioPage(
           Editar usuário
         </h1>
       </div>
-      <UserForm filiais={filiais} user={user} />
+      <UserForm filiais={filiais} user={user} outrasFiliaisIds={outrasFiliaisIds} />
     </AppShell>
   );
 }

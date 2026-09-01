@@ -61,6 +61,29 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Filiais adicionais que um usuário (tipicamente Gerente/Supervisor)
+ * também atende, além da filial principal em users.filialId. Hoje é só
+ * informativo — não restringe o que o usuário vê ou consegue gerenciar no
+ * sistema (isso continua igual para todo mundo), serve apenas para deixar
+ * registrado quais filiais ele acumula.
+ */
+export const userFiliais = pgTable(
+  "user_filiais",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    filialId: text("filial_id")
+      .notNull()
+      .references(() => filiais.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("user_filiais_user_filial_idx").on(t.userId, t.filialId),
+  ]
+);
+
 export const checklistItemDefs = pgTable("checklist_item_defs", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   label: text("label").notNull(),
@@ -210,6 +233,15 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   inspections: many(inspections),
   signatures: many(signatures),
   assignedVehicles: many(vehicles),
+  outrasFiliais: many(userFiliais),
+}));
+
+export const userFiliaisRelations = relations(userFiliais, ({ one }) => ({
+  user: one(users, { fields: [userFiliais.userId], references: [users.id] }),
+  filial: one(filiais, {
+    fields: [userFiliais.filialId],
+    references: [filiais.id],
+  }),
 }));
 
 export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
