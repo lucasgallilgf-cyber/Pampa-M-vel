@@ -69,7 +69,15 @@ export default async function InspectionDetailPage(
                 ` · ${totalFotos} foto${totalFotos !== 1 ? "s" : ""}`}
             </p>
           </div>
-          {canDelete && <DeleteInspectionButton id={inspection.id} />}
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={`/veiculos/${id}/checklist/${inspection.id}/pdf`}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Baixar PDF
+            </a>
+            {canDelete && <DeleteInspectionButton id={inspection.id} />}
+          </div>
         </div>
 
         {!inspection.occurrenceId && (

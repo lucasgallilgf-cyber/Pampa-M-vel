@@ -325,12 +325,14 @@ export async function getInspectionDetail(id: string) {
       vehicleId: inspections.vehicleId,
       placa: vehicles.placa,
       modelo: vehicles.modelo,
+      filialNome: filiais.nome,
       performedById: inspections.performedById,
       performedByNome: users.name,
       occurrenceId: sql<string | null>`(select id from ${occurrences} where ${occurrences.inspectionId} = ${inspections.id} limit 1)`,
     })
     .from(inspections)
     .leftJoin(vehicles, eq(inspections.vehicleId, vehicles.id))
+    .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
     .leftJoin(users, eq(inspections.performedById, users.id))
     .where(eq(inspections.id, id))
     .limit(1);
