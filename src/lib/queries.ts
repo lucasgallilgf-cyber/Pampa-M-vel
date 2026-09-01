@@ -11,7 +11,9 @@ import {
   maintenanceRecords,
   photos,
   userFiliais,
+  vehicleTransfers,
 } from "@/db/schema";
+import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
 import { currentMonthRange } from "./domain";
 
@@ -323,6 +325,7 @@ export async function getInspectionDetail(id: string) {
       modelo: vehicles.modelo,
       performedById: inspections.performedById,
       performedByNome: users.name,
+      occurrenceId: sql<string | null>`(select id from ${occurrences} where ${occurrences.inspectionId} = ${inspections.id} limit 1)`,
     })
     .from(inspections)
     .leftJoin(vehicles, eq(inspections.vehicleId, vehicles.id))
@@ -331,6 +334,16 @@ export async function getInspectionDetail(id: string) {
     .limit(1);
 
   if (!inspection) return null;
+
+  // Assinatura do supervisor só existe para conferências sem avaria — as com
+  // avaria usam o fluxo de assinaturas da própria Ocorrência (condutor +
+  // supervisor + gerente), então nem consulta aqui pra não confundir.
+  const signatureRows = inspection.occurrenceId
+    ? []
+    : await db
+        .select()
+        .from(signatures)
+        .where(eq(signatures.inspectionId, id));
 
   const items = await db
     .select({
@@ -374,7 +387,34 @@ export async function getInspectionDetail(id: string) {
     photos: photosByItem.get(item.id) ?? [],
   }));
 
-  return { inspection, items: itemsWithPhotos };
+  return { inspection, items: itemsWithPhotos, signatures: signatureRows };
+}
+
+/**
+ * Histórico de transferências de filial/centro de custo de um veículo (ver
+ * vehicleTransfers no schema) — um registro por vez que o cadastro do
+ * veículo teve filial ou centro de custo alterados em Editar veículo.
+ */
+export async function listVehicleTransfers(vehicleId: string) {
+  const fromFiliais = alias(filiais, "from_filiais");
+  const toFiliais = alias(filiais, "to_filiais");
+
+  return db
+    .select({
+      id: vehicleTransfers.id,
+      createdAt: vehicleTransfers.createdAt,
+      fromFilialNome: fromFiliais.nome,
+      toFilialNome: toFiliais.nome,
+      fromCentroCusto: vehicleTransfers.fromCentroCusto,
+      toCentroCusto: vehicleTransfers.toCentroCusto,
+      transferredByNome: users.name,
+    })
+    .from(vehicleTransfers)
+    .leftJoin(fromFiliais, eq(vehicleTransfers.fromFilialId, fromFiliais.id))
+    .leftJoin(toFiliais, eq(vehicleTransfers.toFilialId, toFiliais.id))
+    .leftJoin(users, eq(vehicleTransfers.transferredById, users.id))
+    .where(eq(vehicleTransfers.vehicleId, vehicleId))
+    .orderBy(desc(vehicleTransfers.createdAt));
 }
 
 /**

@@ -6,6 +6,7 @@ import Badge from "@/components/Badge";
 import { getInspectionDetail } from "@/lib/queries";
 import { formatKm, ITEM_STATUS_LABELS } from "@/lib/domain";
 import DeleteInspectionButton from "./DeleteInspectionButton";
+import SupervisorSignaturePanel from "./SupervisorSignaturePanel";
 
 const STATUS_STYLES: Record<string, string> = {
   OK: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
@@ -27,12 +28,15 @@ export default async function InspectionDetailPage(
   const data = await getInspectionDetail(inspectionId);
   if (!data || data.inspection.vehicleId !== id) notFound();
 
-  const { inspection, items } = data;
+  const { inspection, items, signatures } = data;
 
   const isOversight = OVERSIGHT_ROLES.includes(session.role);
   const isOwner = inspection.performedById === session.id;
   if (!isOversight && !isOwner) redirect("/");
   const canDelete = session.role === "ADMIN" || isOwner;
+  const supervisorSignature = signatures.find((s) => s.role === "SUPERVISOR") ?? null;
+  const canSignAsSupervisor =
+    session.role === "ADMIN" || session.role === "SUPERVISOR";
 
   const categories = Array.from(new Set(items.map((i) => i.category ?? "Outros")));
   const totalFotos = items.reduce((acc, i) => acc + i.photos.length, 0);
@@ -67,6 +71,14 @@ export default async function InspectionDetailPage(
           </div>
           {canDelete && <DeleteInspectionButton id={inspection.id} />}
         </div>
+
+        {!inspection.occurrenceId && (
+          <SupervisorSignaturePanel
+            inspectionId={inspection.id}
+            signature={supervisorSignature}
+            canSign={canSignAsSupervisor}
+          />
+        )}
 
         <div className="space-y-6">
           {categories.map((category) => (

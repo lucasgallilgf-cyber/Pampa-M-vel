@@ -4,7 +4,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { vehicles, inspections, occurrences } from "@/db/schema";
+import { vehicles, inspections, occurrences, vehicleTransfers } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
 export type VehicleFormState = { error: string | null };
@@ -78,7 +78,7 @@ export async function updateVehicleAction(
   _prevState: VehicleFormState,
   formData: FormData
 ): Promise<VehicleFormState> {
-  await requireUser(["ADMIN"]);
+  const session = await requireUser(["ADMIN"]);
   const id = formData.get("id")?.toString();
   const active = formData.get("active") === "on";
   const parsed = parseVehicleForm(formData);
@@ -102,10 +102,40 @@ export async function updateVehicleAction(
   };
 
   try {
+    // Busca a filial/centro de custo atuais ANTES de atualizar, pra saber se
+    // isso é uma transferência (mudança de filial e/ou centro de custo) e
+    // registrar no histórico. A contagem de frota por filial não precisa de
+    // nenhum tratamento especial aqui — como é um UPDATE no mesmo veículo
+    // (não um novo cadastro), ele simplesmente sai da contagem da filial
+    // antiga e entra na nova; o total geral da frota não muda.
+    const [before] = await db
+      .select({
+        filialId: vehicles.filialId,
+        centroCusto: vehicles.centroCusto,
+      })
+      .from(vehicles)
+      .where(eq(vehicles.id, id))
+      .limit(1);
+
     await db
       .update(vehicles)
       .set({ ...data, active })
       .where(eq(vehicles.id, id));
+
+    const filialMudou = before && before.filialId !== data.filialId;
+    const centroCustoMudou =
+      before && (before.centroCusto ?? null) !== (data.centroCusto ?? null);
+    if (before && (filialMudou || centroCustoMudou)) {
+      await db.insert(vehicleTransfers).values({
+        vehicleId: id,
+        fromFilialId: before.filialId,
+        toFilialId: data.filialId,
+        fromCentroCusto: before.centroCusto,
+        toCentroCusto: data.centroCusto,
+        transferredById: session.id,
+      });
+    }
+
     revalidatePath("/veiculos");
     revalidatePath(`/veiculos/${id}`);
   } catch (err) {

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
-import { getVehicleDetail } from "@/lib/queries";
+import { getVehicleDetail, listVehicleTransfers } from "@/lib/queries";
 import { formatKm, OCCURRENCE_STATUS_LABELS, OCCURRENCE_STATUS_STYLES } from "@/lib/domain";
 
 export default async function VehicleDetailPage(
@@ -11,7 +11,10 @@ export default async function VehicleDetailPage(
 ) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
   const { id } = await props.params;
-  const data = await getVehicleDetail(id);
+  const [data, transfers] = await Promise.all([
+    getVehicleDetail(id),
+    listVehicleTransfers(id),
+  ]);
   if (!data) notFound();
 
   const { vehicle, inspections, occurrences } = data;
@@ -150,6 +153,46 @@ export default async function VehicleDetailPage(
           </div>
         </section>
       </div>
+
+      {transfers.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Histórico de transferências
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-2.5">Data</th>
+                  <th className="px-4 py-2.5">De</th>
+                  <th className="px-4 py-2.5">Para</th>
+                  <th className="px-4 py-2.5">Por</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transfers.map((t) => (
+                  <tr key={t.id}>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {new Date(t.createdAt).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {t.fromFilialNome ?? "—"}
+                      {t.fromCentroCusto ? ` (CC: ${t.fromCentroCusto})` : ""}
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-slate-900">
+                      {t.toFilialNome ?? "—"}
+                      {t.toCentroCusto ? ` (CC: ${t.toCentroCusto})` : ""}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {t.transferredByNome ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </AppShell>
   );
 }

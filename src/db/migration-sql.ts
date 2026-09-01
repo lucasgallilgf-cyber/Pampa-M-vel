@@ -176,4 +176,46 @@ export const INCREMENTAL_MIGRATIONS: { id: string; statements: string[] }[] = [
       `CREATE UNIQUE INDEX IF NOT EXISTS "user_filiais_user_filial_idx" ON "user_filiais" USING btree ("user_id","filial_id");`,
     ],
   },
+  {
+    id: "0006_vehicle_transfers",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "vehicle_transfers" (
+        "id" text PRIMARY KEY NOT NULL,
+        "vehicle_id" text NOT NULL,
+        "from_filial_id" text,
+        "to_filial_id" text,
+        "from_centro_custo" text,
+        "to_centro_custo" text,
+        "transferred_by_id" text NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_transfers" ADD CONSTRAINT "vehicle_transfers_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE cascade ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_transfers" ADD CONSTRAINT "vehicle_transfers_from_filial_id_filiais_id_fk" FOREIGN KEY ("from_filial_id") REFERENCES "public"."filiais"("id") ON DELETE no action ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_transfers" ADD CONSTRAINT "vehicle_transfers_to_filial_id_filiais_id_fk" FOREIGN KEY ("to_filial_id") REFERENCES "public"."filiais"("id") ON DELETE no action ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `DO $$ BEGIN
+        ALTER TABLE "vehicle_transfers" ADD CONSTRAINT "vehicle_transfers_transferred_by_id_users_id_fk" FOREIGN KEY ("transferred_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `CREATE INDEX IF NOT EXISTS "vehicle_transfers_vehicle_idx" ON "vehicle_transfers" USING btree ("vehicle_id");`,
+    ],
+  },
+  {
+    id: "0007_signature_inspection",
+    statements: [
+      `ALTER TABLE "signatures" ALTER COLUMN "occurrence_id" DROP NOT NULL;`,
+      `ALTER TABLE "signatures" ADD COLUMN IF NOT EXISTS "inspection_id" text;`,
+      `DO $$ BEGIN
+        ALTER TABLE "signatures" ADD CONSTRAINT "signatures_inspection_id_inspections_id_fk" FOREIGN KEY ("inspection_id") REFERENCES "public"."inspections"("id") ON DELETE cascade ON UPDATE no action;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "signatures_inspection_role_idx" ON "signatures" USING btree ("inspection_id","role");`,
+      `DO $$ BEGIN
+        ALTER TABLE "signatures" ADD CONSTRAINT "signatures_occurrence_or_inspection_chk" CHECK ((occurrence_id IS NOT NULL AND inspection_id IS NULL) OR (occurrence_id IS NULL AND inspection_id IS NOT NULL));
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+    ],
+  },
 ];

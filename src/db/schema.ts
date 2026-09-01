@@ -176,9 +176,15 @@ export const signatures = pgTable(
   "signatures",
   {
     id: text("id").primaryKey().$defaultFn(() => createId()),
-    occurrenceId: text("occurrence_id")
-      .notNull()
-      .references(() => occurrences.id, { onDelete: "cascade" }),
+    // Uma assinatura pertence OU a uma ocorrência (fluxo de avaria — condutor
+    // + supervisor + gerente, em ordem) OU direto a uma conferência sem
+    // avaria (só o supervisor, ver inspectionId abaixo) — nunca as duas.
+    occurrenceId: text("occurrence_id").references(() => occurrences.id, {
+      onDelete: "cascade",
+    }),
+    inspectionId: text("inspection_id").references(() => inspections.id, {
+      onDelete: "cascade",
+    }),
     role: signatureRoleEnum("role").notNull(),
     userId: text("user_id")
       .notNull()
@@ -189,7 +195,34 @@ export const signatures = pgTable(
   },
   (t) => [
     uniqueIndex("signatures_occurrence_role_idx").on(t.occurrenceId, t.role),
+    uniqueIndex("signatures_inspection_role_idx").on(t.inspectionId, t.role),
   ]
+);
+
+/**
+ * Registro de cada transferência de veículo entre filiais/centros de custo
+ * (mudança feita em Editar veículo). Só um histórico — a contagem de frota
+ * por filial já reflete a filial atual do veículo normalmente (é o mesmo
+ * veículo, então o total geral não muda, só sai de uma filial e entra em
+ * outra).
+ */
+export const vehicleTransfers = pgTable(
+  "vehicle_transfers",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    vehicleId: text("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "cascade" }),
+    fromFilialId: text("from_filial_id").references(() => filiais.id),
+    toFilialId: text("to_filial_id").references(() => filiais.id),
+    fromCentroCusto: text("from_centro_custo"),
+    toCentroCusto: text("to_centro_custo"),
+    transferredById: text("transferred_by_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("vehicle_transfers_vehicle_idx").on(t.vehicleId)]
 );
 
 export const maintenanceRecords = pgTable("maintenance_records", {
@@ -271,6 +304,7 @@ export const inspectionsRelations = relations(inspections, ({ one, many }) => ({
     fields: [inspections.id],
     references: [occurrences.inspectionId],
   }),
+  signatures: many(signatures),
 }));
 
 export const inspectionItemsRelations = relations(
@@ -310,8 +344,34 @@ export const signaturesRelations = relations(signatures, ({ one }) => ({
     fields: [signatures.occurrenceId],
     references: [occurrences.id],
   }),
+  inspection: one(inspections, {
+    fields: [signatures.inspectionId],
+    references: [inspections.id],
+  }),
   user: one(users, { fields: [signatures.userId], references: [users.id] }),
 }));
+
+export const vehicleTransfersRelations = relations(
+  vehicleTransfers,
+  ({ one }) => ({
+    vehicle: one(vehicles, {
+      fields: [vehicleTransfers.vehicleId],
+      references: [vehicles.id],
+    }),
+    fromFilial: one(filiais, {
+      fields: [vehicleTransfers.fromFilialId],
+      references: [filiais.id],
+    }),
+    toFilial: one(filiais, {
+      fields: [vehicleTransfers.toFilialId],
+      references: [filiais.id],
+    }),
+    transferredBy: one(users, {
+      fields: [vehicleTransfers.transferredById],
+      references: [users.id],
+    }),
+  })
+);
 
 export const checklistItemDefsRelations = relations(
   checklistItemDefs,
