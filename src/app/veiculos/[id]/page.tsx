@@ -3,17 +3,19 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
-import { getVehicleDetail, listVehicleTransfers } from "@/lib/queries";
+import { getVehicleDetail, listVehicleTransfers, listFiliais } from "@/lib/queries";
 import { formatKm, OCCURRENCE_STATUS_LABELS, OCCURRENCE_STATUS_STYLES } from "@/lib/domain";
+import VehicleActions from "./VehicleActions";
 
 export default async function VehicleDetailPage(
   props: PageProps<"/veiculos/[id]">
 ) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
   const { id } = await props.params;
-  const [data, transfers] = await Promise.all([
+  const [data, transfers, filiais] = await Promise.all([
     getVehicleDetail(id),
     listVehicleTransfers(id),
+    listFiliais(),
   ]);
   if (!data) notFound();
 
@@ -39,24 +41,14 @@ export default async function VehicleDetailPage(
             {vehicle.filialNome}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {session.role === "ADMIN" && (
-            <Link
-              href={`/veiculos/${vehicle.id}/editar`}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Editar
-            </Link>
-          )}
-          {canChecklist && (
-            <Link
-              href={`/veiculos/${vehicle.id}/checklist`}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Iniciar checklist
-            </Link>
-          )}
-        </div>
+        <VehicleActions
+          vehicleId={vehicle.id}
+          isAdmin={session.role === "ADMIN"}
+          canChecklist={canChecklist}
+          filiais={filiais}
+          currentFilialId={vehicle.filialId}
+          currentCentroCusto={vehicle.centroCusto}
+        />
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">

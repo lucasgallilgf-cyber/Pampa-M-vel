@@ -4,8 +4,9 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { vehicles, inspections, occurrences, vehicleTransfers } from "@/db/schema";
+import { vehicles, inspections, occurrences } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { recordVehicleTransferIfChanged } from "@/lib/queries";
 
 export type VehicleFormState = { error: string | null };
 
@@ -122,16 +123,13 @@ export async function updateVehicleAction(
       .set({ ...data, active })
       .where(eq(vehicles.id, id));
 
-    const filialMudou = before && before.filialId !== data.filialId;
-    const centroCustoMudou =
-      before && (before.centroCusto ?? null) !== (data.centroCusto ?? null);
-    if (before && (filialMudou || centroCustoMudou)) {
-      await db.insert(vehicleTransfers).values({
+    if (before) {
+      await recordVehicleTransferIfChanged({
         vehicleId: id,
-        fromFilialId: before.filialId,
-        toFilialId: data.filialId,
-        fromCentroCusto: before.centroCusto,
-        toCentroCusto: data.centroCusto,
+        beforeFilialId: before.filialId,
+        afterFilialId: data.filialId,
+        beforeCentroCusto: before.centroCusto,
+        afterCentroCusto: data.centroCusto,
         transferredById: session.id,
       });
     }
@@ -145,6 +143,55 @@ export async function updateVehicleAction(
       return { error: `Já existe um veículo com a placa "${data.placa}".` };
     }
     return { error: "Erro ao salvar veículo." };
+  }
+  redirect(`/veiculos/${id}`);
+}
+
+/**
+ * Versão "leve" da transferência — só filial e centro de custo, pro botão
+ * "Transferir" na página do veículo (sem precisar abrir a edição completa
+ * com placa, marca, modelo etc.).
+ */
+export async function transferVehicleAction(
+  _prevState: VehicleFormState,
+  formData: FormData
+): Promise<VehicleFormState> {
+  const session = await requireUser(["ADMIN"]);
+  const id = formData.get("id")?.toString();
+  const filialId = formData.get("filialId")?.toString();
+  const centroCusto = formData.get("centroCusto")?.toString().trim() || null;
+
+  if (!id || !filialId) {
+    return { error: "Selecione a filial de destino." };
+  }
+
+  const [before] = await db
+    .select({ filialId: vehicles.filialId, centroCusto: vehicles.centroCusto })
+    .from(vehicles)
+    .where(eq(vehicles.id, id))
+    .limit(1);
+  if (!before) return { error: "Veículo não encontrado." };
+
+  try {
+    await db
+      .update(vehicles)
+      .set({ filialId, centroCusto })
+      .where(eq(vehicles.id, id));
+
+    await recordVehicleTransferIfChanged({
+      vehicleId: id,
+      beforeFilialId: before.filialId,
+      afterFilialId: filialId,
+      beforeCentroCusto: before.centroCusto,
+      afterCentroCusto: centroCusto,
+      transferredById: session.id,
+    });
+
+    revalidatePath("/veiculos");
+    revalidatePath(`/veiculos/${id}`);
+  } catch (err) {
+    unstable_rethrow(err);
+    return { error: "Erro ao transferir veículo." };
   }
   redirect(`/veiculos/${id}`);
 }

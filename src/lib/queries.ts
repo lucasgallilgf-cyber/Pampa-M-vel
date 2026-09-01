@@ -391,6 +391,43 @@ export async function getInspectionDetail(id: string) {
 }
 
 /**
+ * Registra uma transferência (linha em vehicleTransfers) se a filial e/ou
+ * centro de custo realmente mudaram — chamado tanto pela edição completa do
+ * veículo quanto pelo botão dedicado "Transferir". Não faz nada se nada
+ * mudou (evita linhas de histórico vazias quando o resto do cadastro é
+ * editado sem trocar filial/centro de custo).
+ */
+export async function recordVehicleTransferIfChanged(params: {
+  vehicleId: string;
+  beforeFilialId: string | null;
+  afterFilialId: string | null;
+  beforeCentroCusto: string | null;
+  afterCentroCusto: string | null;
+  transferredById: string;
+}) {
+  const {
+    vehicleId,
+    beforeFilialId,
+    afterFilialId,
+    beforeCentroCusto,
+    afterCentroCusto,
+    transferredById,
+  } = params;
+  const filialMudou = beforeFilialId !== afterFilialId;
+  const centroCustoMudou = (beforeCentroCusto ?? null) !== (afterCentroCusto ?? null);
+  if (!filialMudou && !centroCustoMudou) return;
+
+  await db.insert(vehicleTransfers).values({
+    vehicleId,
+    fromFilialId: beforeFilialId,
+    toFilialId: afterFilialId,
+    fromCentroCusto: beforeCentroCusto,
+    toCentroCusto: afterCentroCusto,
+    transferredById,
+  });
+}
+
+/**
  * Histórico de transferências de filial/centro de custo de um veículo (ver
  * vehicleTransfers no schema) — um registro por vez que o cadastro do
  * veículo teve filial ou centro de custo alterados em Editar veículo.
