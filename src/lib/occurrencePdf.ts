@@ -186,6 +186,7 @@ type OccurrenceDetail = {
     relato: string | null;
     resolvedAt: string | Date | null;
     resolutionNotes: string | null;
+    performedByNome: string | null;
   };
   avariaItems: { id: string; label: string | null; notes: string | null }[];
   photos: { id: string; url: string }[];
@@ -220,6 +221,10 @@ export async function buildOccurrencePdf(
       (occurrence.km != null ? ` · ${formatKm(occurrence.km)}` : ""),
     { size: 10, color: MUTED }
   );
+  w.text(`Condutor: ${occurrence.performedByNome ?? "—"}`, {
+    size: 10,
+    color: MUTED,
+  });
 
   const allSigned = SIGNATURE_ORDER.every((r) =>
     signatures.some((s) => s.role === r)
