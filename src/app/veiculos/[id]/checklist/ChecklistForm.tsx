@@ -254,14 +254,13 @@ export default function ChecklistForm({
                               type="file"
                               name={`photos_${def.id}`}
                               accept="image/*"
-                              capture="environment"
                               multiple
                               required
                               className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-red-600 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-red-700"
                             />
                             <p className="mt-1 text-[11px] text-slate-500">
-                              Toque para tirar a foto com a câmera do celular
-                              (ou escolher da galeria).
+                              Toque para tirar uma foto na hora ou escolher
+                              uma já salva na galeria.
                             </p>
                           </div>
                         </div>
@@ -276,7 +275,6 @@ export default function ChecklistForm({
                             type="file"
                             name={`photos_${def.id}`}
                             accept="image/*"
-                            capture="environment"
                             multiple
                             className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
                           />
