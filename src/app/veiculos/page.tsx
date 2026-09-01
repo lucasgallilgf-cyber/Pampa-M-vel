@@ -2,24 +2,51 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
-import { listVehicles, listFiliais } from "@/lib/queries";
+import {
+  listVehicles,
+  listFiliais,
+  listDistinctModelos,
+  listDistinctCentrosCusto,
+} from "@/lib/queries";
 import { formatKm } from "@/lib/domain";
 import DeleteVehicleButton from "./DeleteVehicleButton";
+
+function strParam(v: string | string[] | undefined) {
+  return typeof v === "string" && v !== "" ? v : undefined;
+}
 
 export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
   const searchParams = await props.searchParams;
-  const filialId =
-    typeof searchParams.filial === "string" ? searchParams.filial : undefined;
-  const q = typeof searchParams.q === "string" ? searchParams.q : undefined;
+  const filialId = strParam(searchParams.filial);
+  const q = strParam(searchParams.q);
+  const modelo = strParam(searchParams.modelo);
+  const centroCusto = strParam(searchParams.centroCusto);
+  const status = strParam(searchParams.status) as
+    | "conferido"
+    | "pendente"
+    | undefined;
+  const avarias = strParam(searchParams.avarias) as "com" | "sem" | undefined;
 
-  const [vehicles, filiais] = await Promise.all([
-    listVehicles({ filialId, q }),
+  const [vehicles, filiais, modelos, centrosCusto] = await Promise.all([
+    listVehicles({ filialId, q, modelo, centroCusto, status, avarias }),
     listFiliais(),
+    listDistinctModelos(),
+    listDistinctCentrosCusto(),
   ]);
 
   const canChecklist = session.role === "ADMIN" || session.role === "SUPERVISOR";
   const isAdmin = session.role === "ADMIN";
+
+  const hasFilter = Boolean(
+    filialId || q || modelo || centroCusto || status || avarias
+  );
+  const totals = {
+    conferidos: vehicles.filter((v) => v.conferidoEsteMes).length,
+    pendentes: vehicles.filter((v) => !v.conferidoEsteMes).length,
+    comAvaria: vehicles.filter((v) => v.avariasAbertas > 0).length,
+    kmTotal: vehicles.reduce((acc, v) => acc + v.kmAtual, 0),
+  };
 
   return (
     <AppShell session={session}>
@@ -69,12 +96,63 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
               </option>
             ))}
           </select>
+          <select
+            name="modelo"
+            defaultValue={modelo ?? ""}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+          >
+            <option value="">Todos os modelos</option>
+            {modelos.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            name="centroCusto"
+            defaultValue={centroCusto ?? ""}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+          >
+            <option value="">Todos os centros de custo</option>
+            {centrosCusto.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+            <option value="__SEM__">Sem centro de custo</option>
+          </select>
+          <select
+            name="status"
+            defaultValue={status ?? ""}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+          >
+            <option value="">Status do mês (todos)</option>
+            <option value="conferido">Conferido</option>
+            <option value="pendente">Pendente</option>
+          </select>
+          <select
+            name="avarias"
+            defaultValue={avarias ?? ""}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+          >
+            <option value="">Avarias (todas)</option>
+            <option value="com">Com avaria aberta</option>
+            <option value="sem">Sem avaria aberta</option>
+          </select>
           <button
             type="submit"
             className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
           >
             Filtrar
           </button>
+          {hasFilter && (
+            <Link
+              href="/veiculos"
+              className="text-sm font-medium text-slate-500 hover:underline"
+            >
+              Limpar filtros
+            </Link>
+          )}
         </form>
       </div>
 
@@ -244,6 +322,27 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
           </tbody>
         </table>
       </div>
+
+      {vehicles.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <span className="font-semibold text-slate-900">
+            {hasFilter ? "Total filtrado: " : "Total: "}
+            {vehicles.length} veículo{vehicles.length !== 1 && "s"}
+          </span>
+          <span className="text-emerald-700">
+            {totals.conferidos} conferido{totals.conferidos !== 1 && "s"}
+          </span>
+          <span className="text-amber-700">
+            {totals.pendentes} pendente{totals.pendentes !== 1 && "s"}
+          </span>
+          <span className="text-red-700">
+            {totals.comAvaria} com avaria{totals.comAvaria !== 1 && "s"}
+          </span>
+          <span className="text-slate-600">
+            KM total: {formatKm(totals.kmTotal)}
+          </span>
+        </div>
+      )}
     </AppShell>
   );
 }

@@ -14,9 +14,21 @@ import {
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
 import { currentMonthRange } from "./domain";
 
-export async function listVehicles(opts: { filialId?: string; q?: string } = {}) {
+export async function listVehicles(
+  opts: {
+    filialId?: string;
+    q?: string;
+    modelo?: string;
+    centroCusto?: string;
+    status?: "conferido" | "pendente";
+    avarias?: "com" | "sem";
+  } = {}
+) {
   const { start, end } = currentMonthRange();
-  const { filialId, q } = opts;
+  const { filialId, q, modelo, centroCusto, status, avarias } = opts;
+
+  const conferidoExpr = sql<boolean>`bool_or(${inspections.createdAt} >= ${start.toISOString()}::timestamptz and ${inspections.createdAt} < ${end.toISOString()}::timestamptz)`;
+  const avariasAbertasExpr = sql<number>`count(distinct case when ${occurrences.status} != 'RESOLVIDA' then ${occurrences.id} end)::int`;
 
   const rows = await db
     .select({
@@ -30,8 +42,8 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
       filialId: vehicles.filialId,
       condutorNome: vehicles.condutorNome,
       lastInspectionAt: sql<string | null>`max(${inspections.createdAt})`,
-      conferidoEsteMes: sql<boolean>`bool_or(${inspections.createdAt} >= ${start.toISOString()}::timestamptz and ${inspections.createdAt} < ${end.toISOString()}::timestamptz)`,
-      avariasAbertas: sql<number>`count(distinct case when ${occurrences.status} != 'RESOLVIDA' then ${occurrences.id} end)::int`,
+      conferidoEsteMes: conferidoExpr,
+      avariasAbertas: avariasAbertasExpr,
     })
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
@@ -40,15 +52,50 @@ export async function listVehicles(opts: { filialId?: string; q?: string } = {})
     .where(
       and(
         filialId ? eq(vehicles.filialId, filialId) : undefined,
+        modelo ? eq(vehicles.modelo, modelo) : undefined,
+        centroCusto
+          ? centroCusto === "__SEM__"
+            ? or(
+                sql`${vehicles.centroCusto} is null`,
+                sql`trim(${vehicles.centroCusto}) = ''`
+              )
+            : eq(vehicles.centroCusto, centroCusto)
+          : undefined,
         q
           ? or(ilike(vehicles.placa, `%${q}%`), ilike(vehicles.modelo, `%${q}%`))
           : undefined
       )
     )
     .groupBy(vehicles.id, filiais.nome)
+    .having(
+      and(
+        status === "conferido" ? sql`${conferidoExpr} = true` : undefined,
+        status === "pendente" ? sql`${conferidoExpr} = false` : undefined,
+        avarias === "com" ? sql`${avariasAbertasExpr} > 0` : undefined,
+        avarias === "sem" ? sql`${avariasAbertasExpr} = 0` : undefined
+      )
+    )
     .orderBy(vehicles.placa);
 
   return rows;
+}
+
+export async function listDistinctModelos() {
+  const rows = await db
+    .selectDistinct({ modelo: vehicles.modelo })
+    .from(vehicles)
+    .orderBy(vehicles.modelo);
+  return rows.map((r) => r.modelo).filter((m) => !!m && m.trim() !== "");
+}
+
+export async function listDistinctCentrosCusto() {
+  const rows = await db
+    .selectDistinct({ centroCusto: vehicles.centroCusto })
+    .from(vehicles)
+    .orderBy(vehicles.centroCusto);
+  return rows
+    .map((r) => r.centroCusto)
+    .filter((c): c is string => !!c && c.trim() !== "");
 }
 
 export async function listFiliais() {
