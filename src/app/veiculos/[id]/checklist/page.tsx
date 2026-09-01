@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requireUser, canAccessFilial } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import { getVehicleDetail, listChecklistItemDefs } from "@/lib/queries";
 import ChecklistForm from "./ChecklistForm";
@@ -15,6 +15,7 @@ export default async function ChecklistPage(
     listChecklistItemDefs(),
   ]);
   if (!data) notFound();
+  if (!canAccessFilial(session, data.vehicle.filialId)) notFound();
 
   if (
     session.role === "CONDUTOR" &&

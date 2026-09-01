@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requireUser, canAccessFilial } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import { getInspectionDetail } from "@/lib/queries";
@@ -30,7 +30,9 @@ export default async function InspectionDetailPage(
 
   const { inspection, items, signatures } = data;
 
-  const isOversight = OVERSIGHT_ROLES.includes(session.role);
+  const isOversight =
+    OVERSIGHT_ROLES.includes(session.role) &&
+    canAccessFilial(session, inspection.filialId);
   const isOwner = inspection.performedById === session.id;
   if (!isOversight && !isOwner) redirect("/");
   const canDelete = session.role === "ADMIN" || isOwner;

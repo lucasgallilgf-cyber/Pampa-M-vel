@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireUser, scopedFilialId } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import { listMaintenanceRecords } from "@/lib/queries";
@@ -18,7 +18,10 @@ export default async function ManutencaoPage(
       ? (searchParams.status as "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA")
       : undefined;
 
-  const records = await listMaintenanceRecords({ status });
+  const records = await listMaintenanceRecords({
+    status,
+    filialId: scopedFilialId(session),
+  });
 
   const filters: { label: string; value?: typeof status }[] = [
     { label: "Todas", value: undefined },

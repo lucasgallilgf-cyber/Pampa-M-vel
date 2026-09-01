@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireUser, scopedFilialId } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import {
@@ -17,8 +17,9 @@ function strParam(v: string | string[] | undefined) {
 
 export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
+  const isSupervisor = session.role === "SUPERVISOR";
   const searchParams = await props.searchParams;
-  const filialId = strParam(searchParams.filial);
+  const filialId = scopedFilialId(session, strParam(searchParams.filial));
   const q = strParam(searchParams.q);
   const modelo = strParam(searchParams.modelo);
   const centroCusto = strParam(searchParams.centroCusto);
@@ -56,6 +57,8 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
           <p className="text-sm text-slate-500">
             {vehicles.length} veículo{vehicles.length !== 1 && "s"} encontrado
             {vehicles.length !== 1 && "s"}
+            {isSupervisor &&
+              ` · Filial: ${filiais.find((f) => f.id === filialId)?.nome ?? "—"}`}
           </p>
         </div>
 
@@ -84,18 +87,22 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
             placeholder="Buscar placa ou modelo…"
             className="w-52 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
           />
-          <select
-            name="filial"
-            defaultValue={filialId ?? ""}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
-          >
-            <option value="">Todas as filiais</option>
-            {filiais.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
+          {isSupervisor ? (
+            <input type="hidden" name="filial" value={filialId ?? ""} />
+          ) : (
+            <select
+              name="filial"
+              defaultValue={filialId ?? ""}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Todas as filiais</option>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             name="modelo"
             defaultValue={modelo ?? ""}

@@ -326,6 +326,7 @@ export async function getInspectionDetail(id: string) {
       vehicleId: inspections.vehicleId,
       placa: vehicles.placa,
       modelo: vehicles.modelo,
+      filialId: vehicles.filialId,
       filialNome: filiais.nome,
       performedById: inspections.performedById,
       performedByNome: users.name,
@@ -583,6 +584,7 @@ export async function getOccurrenceDetail(id: string) {
       vehicleId: occurrences.vehicleId,
       placa: vehicles.placa,
       modelo: vehicles.modelo,
+      filialId: vehicles.filialId,
       filialNome: filiais.nome,
       assignedCondutorId: vehicles.assignedCondutorId,
       inspectionId: occurrences.inspectionId,
@@ -742,8 +744,9 @@ export async function getSignatureLinkDetail(token: string) {
 
 export async function listMaintenanceRecords(opts: {
   status?: "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA";
+  filialId?: string;
 } = {}) {
-  const { status } = opts;
+  const { status, filialId } = opts;
   return db
     .select({
       id: maintenanceRecords.id,
@@ -760,7 +763,12 @@ export async function listMaintenanceRecords(opts: {
     .from(maintenanceRecords)
     .leftJoin(vehicles, eq(maintenanceRecords.vehicleId, vehicles.id))
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
-    .where(status ? eq(maintenanceRecords.status, status) : undefined)
+    .where(
+      and(
+        status ? eq(maintenanceRecords.status, status) : undefined,
+        filialId ? eq(vehicles.filialId, filialId) : undefined
+      )
+    )
     .orderBy(desc(maintenanceRecords.createdAt));
 }
 
@@ -821,8 +829,9 @@ export async function getDashboardStats(opts: { filialId?: string } = {}) {
   };
 }
 
-export async function getDashboardByFilial() {
+export async function getDashboardByFilial(opts: { filialId?: string } = {}) {
   const { start, end } = currentMonthRange();
+  const { filialId } = opts;
 
   const rows = await db
     .select({
@@ -836,6 +845,7 @@ export async function getDashboardByFilial() {
     .leftJoin(vehicles, eq(vehicles.filialId, filiais.id))
     .leftJoin(inspections, eq(inspections.vehicleId, vehicles.id))
     .leftJoin(occurrences, eq(occurrences.vehicleId, vehicles.id))
+    .where(filialId ? eq(filiais.id, filialId) : undefined)
     .groupBy(filiais.id, filiais.nome)
     .orderBy(filiais.nome);
 
@@ -848,7 +858,11 @@ export async function getDashboardByFilial() {
   }));
 }
 
-export async function getDashboardByPeriod(months = 6) {
+export async function getDashboardByPeriod(
+  months = 6,
+  opts: { filialId?: string } = {}
+) {
+  const { filialId } = opts;
   const rows = await db.execute<{
     mes: string;
     conferidos: number;
@@ -860,33 +874,39 @@ export async function getDashboardByPeriod(months = 6) {
       count(distinct o.id)::int as avarias
     from ${inspections} i
     left join ${occurrences} o on o.inspection_id = i.id
+    left join ${vehicles} v on v.id = i.vehicle_id
     where i.created_at >= date_trunc('month', now()) - interval '${sql.raw(
       String(months - 1)
     )} months'
+    ${filialId ? sql`and v.filial_id = ${filialId}` : sql``}
     group by 1
     order by 1
   `);
   return rows as unknown as { mes: string; conferidos: number; avarias: number }[];
 }
 
-export async function getVehicleCountByCentroCusto() {
+export async function getVehicleCountByCentroCusto(opts: { filialId?: string } = {}) {
+  const { filialId } = opts;
   const rows = await db.execute<{ centroCusto: string; total: number }>(sql`
     select
       coalesce(nullif(trim(${vehicles.centroCusto}), ''), 'Sem centro de custo') as "centroCusto",
       count(*)::int as total
     from ${vehicles}
+    ${filialId ? sql`where ${vehicles.filialId} = ${filialId}` : sql``}
     group by 1
     order by total desc, "centroCusto"
   `);
   return rows as unknown as { centroCusto: string; total: number }[];
 }
 
-export async function getVehicleCountByModelo() {
+export async function getVehicleCountByModelo(opts: { filialId?: string } = {}) {
+  const { filialId } = opts;
   const rows = await db.execute<{ modelo: string; total: number }>(sql`
     select
       ${vehicles.modelo} as modelo,
       count(*)::int as total
     from ${vehicles}
+    ${filialId ? sql`where ${vehicles.filialId} = ${filialId}` : sql``}
     group by 1
     order by total desc, modelo
   `);
@@ -942,8 +962,12 @@ export async function getExampleDataSummary(currentUserId: string) {
   };
 }
 
-export async function pendingVehiclesThisMonth(limit = 50) {
+export async function pendingVehiclesThisMonth(
+  limit = 50,
+  opts: { filialId?: string } = {}
+) {
   const { start, end } = currentMonthRange();
+  const { filialId } = opts;
   const rows = await db
     .select({
       id: vehicles.id,
@@ -954,12 +978,15 @@ export async function pendingVehiclesThisMonth(limit = 50) {
     .from(vehicles)
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
     .where(
-      sql`not exists (
-        select 1 from ${inspections}
-        where ${inspections.vehicleId} = ${vehicles.id}
-        and ${inspections.createdAt} >= ${start.toISOString()}::timestamptz
-        and ${inspections.createdAt} < ${end.toISOString()}::timestamptz
-      )`
+      and(
+        sql`not exists (
+          select 1 from ${inspections}
+          where ${inspections.vehicleId} = ${vehicles.id}
+          and ${inspections.createdAt} >= ${start.toISOString()}::timestamptz
+          and ${inspections.createdAt} < ${end.toISOString()}::timestamptz
+        )`,
+        filialId ? eq(vehicles.filialId, filialId) : undefined
+      )
     )
     .orderBy(vehicles.placa)
     .limit(limit);

@@ -62,3 +62,34 @@ export async function requireUser(
 // Client components must import ROLE_LABELS from "@/lib/domain" directly —
 // this module pulls in next/headers and cannot be bundled into client code.
 export { ROLE_LABELS } from "./domain";
+
+// Sentinel filialId that never matches a real row — used so a SUPERVISOR
+// without filial cadastrada vê a lista vazia em vez de ver tudo (undefined
+// nas queries desativa o filtro por completo).
+const NO_FILIAL_SENTINEL = "__sem_filial_cadastrada__";
+
+/**
+ * SUPERVISOR só pode ver/filtrar pela própria filial (a "filial principal"
+ * do cadastro) — nunca as demais, mesmo tentando trocar o filtro pela URL.
+ * As outras roles (ADMIN, GERENTE) continuam livres para escolher qualquer
+ * filial ou "todas", então `requested` só é respeitado nesse caso.
+ */
+export function scopedFilialId(
+  session: SessionPayload,
+  requested?: string
+): string | undefined {
+  if (session.role === "SUPERVISOR") {
+    return session.filialId ?? NO_FILIAL_SENTINEL;
+  }
+  return requested;
+}
+
+/** Usado nas páginas de detalhe (veículo, conferência, ocorrência) pra
+ * bloquear acesso direto por URL a algo fora da filial do SUPERVISOR. */
+export function canAccessFilial(
+  session: SessionPayload,
+  filialId: string | null | undefined
+): boolean {
+  if (session.role !== "SUPERVISOR") return true;
+  return !!filialId && filialId === session.filialId;
+}

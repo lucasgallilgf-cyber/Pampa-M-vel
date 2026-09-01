@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireUser, scopedFilialId } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import StatTile from "@/components/StatTile";
 import {
@@ -22,8 +22,9 @@ function strParam(v: string | string[] | undefined) {
 
 export default async function RevisoesPage(props: PageProps<"/revisoes">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
+  const isSupervisor = session.role === "SUPERVISOR";
   const searchParams = await props.searchParams;
-  const filialId = strParam(searchParams.filial);
+  const filialId = scopedFilialId(session, strParam(searchParams.filial));
   const q = strParam(searchParams.q);
   const status = strParam(searchParams.status) as
     | "PENDENTE"
@@ -104,18 +105,22 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
             placeholder="Buscar placa ou modelo…"
             className="w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
           />
-          <select
-            name="filial"
-            defaultValue={filialId ?? ""}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
-          >
-            <option value="">Todas as filiais</option>
-            {filiais.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
+          {isSupervisor ? (
+            <input type="hidden" name="filial" value={filialId ?? ""} />
+          ) : (
+            <select
+              name="filial"
+              defaultValue={filialId ?? ""}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Todas as filiais</option>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             name="status"
             defaultValue={status ?? ""}

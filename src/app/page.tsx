@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
+import { getSession, scopedFilialId } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import StatTile from "@/components/StatTile";
@@ -93,9 +93,12 @@ export default async function HomePage(props: PageProps<"/">) {
     );
   }
 
+  const isSupervisor = session.role === "SUPERVISOR";
   const searchParams = await props.searchParams;
-  const filialId =
-    typeof searchParams.filial === "string" ? searchParams.filial : undefined;
+  const filialId = scopedFilialId(
+    session,
+    typeof searchParams.filial === "string" ? searchParams.filial : undefined
+  );
 
   const [
     stats,
@@ -107,11 +110,11 @@ export default async function HomePage(props: PageProps<"/">) {
     filiais,
   ] = await Promise.all([
     getDashboardStats({ filialId }),
-    getDashboardByFilial(),
-    getDashboardByPeriod(6),
-    getVehicleCountByCentroCusto(),
-    getVehicleCountByModelo(),
-    pendingVehiclesThisMonth(8),
+    getDashboardByFilial({ filialId }),
+    getDashboardByPeriod(6, { filialId }),
+    getVehicleCountByCentroCusto({ filialId }),
+    getVehicleCountByModelo({ filialId }),
+    pendingVehiclesThisMonth(8, { filialId }),
     listFiliais(),
   ]);
 
@@ -138,26 +141,32 @@ export default async function HomePage(props: PageProps<"/">) {
             Visão geral atualizada automaticamente a cada conferência.
           </p>
         </div>
-        <form method="GET" className="flex items-center gap-2">
-          <select
-            name="filial"
-            defaultValue={filialId ?? ""}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
-          >
-            <option value="">Todas as filiais</option>
-            {filiais.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            Aplicar
-          </button>
-        </form>
+        {isSupervisor ? (
+          <p className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
+            Filial: {filiais.find((f) => f.id === filialId)?.nome ?? "—"}
+          </p>
+        ) : (
+          <form method="GET" className="flex items-center gap-2">
+            <select
+              name="filial"
+              defaultValue={filialId ?? ""}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Todas as filiais</option>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Aplicar
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
