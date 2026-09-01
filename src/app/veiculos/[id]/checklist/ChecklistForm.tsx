@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { submitChecklistAction, ChecklistFormState } from "./actions";
 import { formatKm } from "@/lib/domain";
@@ -15,7 +15,7 @@ type Vehicle = {
   filialNome: string | null;
 };
 
-type ItemUiState = { status: "OK" | "AVARIA"; notes: string };
+type ItemUiState = { status: "OK" | "AVARIA"; notes: string; photos: File[] };
 
 const initialState: ChecklistFormState = { error: null };
 
@@ -84,7 +84,9 @@ export default function ChecklistForm({
     initialState
   );
   const [items, setItems] = useState<Record<string, ItemUiState>>(() =>
-    Object.fromEntries(itemDefs.map((d) => [d.id, { status: "OK", notes: "" }]))
+    Object.fromEntries(
+      itemDefs.map((d) => [d.id, { status: "OK", notes: "", photos: [] }])
+    )
   );
   const [km, setKm] = useState(String(vehicle.kmAtual));
   const [isCompressing, setIsCompressing] = useState(false);
@@ -101,6 +103,9 @@ export default function ChecklistForm({
   function setNotes(id: string, notes: string) {
     setItems((prev) => ({ ...prev, [id]: { ...prev[id], notes } }));
   }
+  function setPhotos(id: string, photos: File[]) {
+    setItems((prev) => ({ ...prev, [id]: { ...prev[id], photos } }));
+  }
 
   // Margem de segurança abaixo do limite de ~4,5MB que a Vercel aplica no
   // nível de rede para o corpo inteiro da requisição (nome dos campos,
@@ -109,23 +114,32 @@ export default function ChecklistForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setClientError(null);
+
+    const semFoto = itemDefs.find(
+      (d) => items[d.id].status === "AVARIA" && items[d.id].photos.length === 0
+    );
+    if (semFoto) {
+      setClientError(
+        `Adicione pelo menos uma foto do item "${semFoto.label}" (marcado como avaria).`
+      );
+      return;
+    }
+
     const original = new FormData(e.currentTarget);
     setIsCompressing(true);
-    setClientError(null);
     try {
       const compressed = new FormData();
       let totalPhotoBytes = 0;
       for (const [key, value] of original.entries()) {
-        if (
-          value instanceof File &&
-          value.size > 0 &&
-          value.type.startsWith("image/")
-        ) {
-          const compressedFile = await compressImage(value);
+        compressed.append(key, value);
+      }
+
+      for (const def of itemDefs) {
+        for (const file of items[def.id].photos) {
+          const compressedFile = await compressImage(file);
           totalPhotoBytes += compressedFile.size;
-          compressed.append(key, compressedFile);
-        } else {
-          compressed.append(key, value);
+          compressed.append(`photos_${def.id}`, compressedFile);
         }
       }
 
@@ -248,20 +262,13 @@ export default function ChecklistForm({
                           />
                           <div>
                             <label className="mb-1 block text-xs font-medium text-red-700">
-                              Fotos (obrigatório)
+                              Fotos (obrigatório, pode adicionar várias)
                             </label>
-                            <input
-                              type="file"
-                              name={`photos_${def.id}`}
-                              accept="image/*"
-                              multiple
-                              required
-                              className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-red-600 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-red-700"
+                            <PhotoPicker
+                              files={itemState.photos}
+                              onChange={(photos) => setPhotos(def.id, photos)}
+                              accent="red"
                             />
-                            <p className="mt-1 text-[11px] text-slate-500">
-                              Toque para tirar uma foto na hora ou escolher
-                              uma já salva na galeria.
-                            </p>
                           </div>
                         </div>
                       )}
@@ -269,14 +276,12 @@ export default function ChecklistForm({
                       {itemState.status === "OK" && (
                         <div className="mt-2">
                           <label className="mb-1 block text-xs font-medium text-slate-500">
-                            Foto (opcional)
+                            Fotos (opcional, pode adicionar várias)
                           </label>
-                          <input
-                            type="file"
-                            name={`photos_${def.id}`}
-                            accept="image/*"
-                            multiple
-                            className="block w-full text-xs text-slate-500 file:mr-2 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
+                          <PhotoPicker
+                            files={itemState.photos}
+                            onChange={(photos) => setPhotos(def.id, photos)}
+                            accent="slate"
                           />
                         </div>
                       )}
@@ -315,6 +320,87 @@ export default function ChecklistForm({
         </p>
       )}
     </form>
+  );
+}
+
+// Picker de fotos que ACUMULA os arquivos escolhidos em vez de substituir a
+// seleção anterior. O <input type="file"> nativo, sozinho, esquece a foto
+// já escolhida assim que o usuário abre o seletor de novo — o que atrapalha
+// muito no celular, já que tirar uma foto pela câmera é sempre uma
+// interação por vez (não dá pra tirar várias fotos seguidas num único
+// toque). Aqui cada vez que o usuário escolhe algo (seja pela câmera, seja
+// pela galeria) o resultado é somado à lista, com miniaturas e botão de
+// remover individualmente.
+function PhotoPicker({
+  files,
+  onChange,
+  accent,
+}: {
+  files: File[];
+  onChange: (files: File[]) => void;
+  accent: "red" | "slate";
+}) {
+  const previews = useMemo(
+    () => files.map((f) => URL.createObjectURL(f)),
+    [files]
+  );
+  useEffect(() => {
+    return () => {
+      previews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [previews]);
+
+  function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length > 0) onChange([...files, ...picked]);
+    e.target.value = "";
+  }
+  function removeAt(index: number) {
+    onChange(files.filter((_, i) => i !== index));
+  }
+
+  const buttonClass =
+    accent === "red"
+      ? "border-red-300 bg-red-600 text-white hover:bg-red-700"
+      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {files.map((file, i) => (
+        <div
+          key={i}
+          className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previews[i]}
+            alt={`Foto ${i + 1}`}
+            className="h-full w-full object-cover"
+          />
+          <button
+            type="button"
+            onClick={() => removeAt(i)}
+            aria-label="Remover foto"
+            className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-bl-lg bg-black/60 text-xs font-bold text-white hover:bg-black/80"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <label
+        className={`flex h-14 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border text-[10px] font-medium leading-tight ${buttonClass}`}
+      >
+        <span className="text-lg leading-none">+</span>
+        Foto
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handlePick}
+          className="hidden"
+        />
+      </label>
+    </div>
   );
 }
 
