@@ -8,6 +8,8 @@ import {
   getDashboardStats,
   getDashboardByFilial,
   getDashboardByPeriod,
+  getVehicleCountByCentroCusto,
+  getVehicleCountByModelo,
   pendingVehiclesThisMonth,
   listOccurrencesForCondutor,
   listVehiclesForCondutor,
@@ -19,6 +21,7 @@ import {
   OCCURRENCE_STATUS_STYLES,
 } from "@/lib/domain";
 import { FilialBarChart, PeriodLineChart } from "@/components/DashboardCharts";
+import CountBarList from "@/components/CountBarList";
 
 export default async function HomePage(props: PageProps<"/">) {
   const session = await getSession();
@@ -94,14 +97,35 @@ export default async function HomePage(props: PageProps<"/">) {
   const filialId =
     typeof searchParams.filial === "string" ? searchParams.filial : undefined;
 
-  const [stats, byFilial, byPeriod, pendingVehicles, filiais] =
-    await Promise.all([
-      getDashboardStats({ filialId }),
-      getDashboardByFilial(),
-      getDashboardByPeriod(6),
-      pendingVehiclesThisMonth(8),
-      listFiliais(),
-    ]);
+  const [
+    stats,
+    byFilial,
+    byPeriod,
+    byCentroCusto,
+    byModelo,
+    pendingVehicles,
+    filiais,
+  ] = await Promise.all([
+    getDashboardStats({ filialId }),
+    getDashboardByFilial(),
+    getDashboardByPeriod(6),
+    getVehicleCountByCentroCusto(),
+    getVehicleCountByModelo(),
+    pendingVehiclesThisMonth(8),
+    listFiliais(),
+  ]);
+
+  const frotaPorFilial = byFilial
+    .map((f) => ({ label: f.filialNome, count: f.totalVeiculos }))
+    .sort((a, b) => b.count - a.count);
+  const frotaPorCentroCusto = byCentroCusto.map((c) => ({
+    label: c.centroCusto,
+    count: c.total,
+  }));
+  const frotaPorModelo = byModelo.map((m) => ({
+    label: m.modelo,
+    count: m.total,
+  }));
 
   return (
     <AppShell session={session}>
@@ -183,6 +207,27 @@ export default async function HomePage(props: PageProps<"/">) {
             Conferidos e avarias por período
           </h2>
           <PeriodLineChart data={byPeriod} />
+        </section>
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Frota por filial
+          </h2>
+          <CountBarList items={frotaPorFilial} />
+        </section>
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Frota por centro de custo
+          </h2>
+          <CountBarList items={frotaPorCentroCusto} />
+        </section>
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Frota por modelo
+          </h2>
+          <CountBarList items={frotaPorModelo} />
         </section>
       </div>
 

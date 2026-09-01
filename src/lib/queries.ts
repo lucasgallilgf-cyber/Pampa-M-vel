@@ -249,9 +249,9 @@ export async function getInspectionDetail(id: string) {
     .where(eq(inspectionItems.inspectionId, id));
 
   // As fotos ficam salvas por item do checklist (tanto de itens "OK" quanto
-  // "Avaria") -- so as de avaria tambem aparecem na pagina de Ocorrencia.
+  // "Avaria") — só as de avaria também aparecem na página de Ocorrência.
   // Aqui trazemos todas, para exibir o checklist completo com todas as fotos
-  // tiradas na conferencia.
+  // tiradas na conferência.
   const itemIds = items.map((i) => i.id);
   const itemPhotos =
     itemIds.length > 0
@@ -499,6 +499,30 @@ export async function getDashboardByPeriod(months = 6) {
     order by 1
   `);
   return rows as unknown as { mes: string; conferidos: number; avarias: number }[];
+}
+
+export async function getVehicleCountByCentroCusto() {
+  const rows = await db.execute<{ centroCusto: string; total: number }>(sql`
+    select
+      coalesce(nullif(trim(${vehicles.centroCusto}), ''), 'Sem centro de custo') as "centroCusto",
+      count(*)::int as total
+    from ${vehicles}
+    group by 1
+    order by total desc, "centroCusto"
+  `);
+  return rows as unknown as { centroCusto: string; total: number }[];
+}
+
+export async function getVehicleCountByModelo() {
+  const rows = await db.execute<{ modelo: string; total: number }>(sql`
+    select
+      ${vehicles.modelo} as modelo,
+      count(*)::int as total
+    from ${vehicles}
+    group by 1
+    order by total desc, modelo
+  `);
+  return rows as unknown as { modelo: string; total: number }[];
 }
 
 export async function findUserByRoleForOccurrenceSignature() {
