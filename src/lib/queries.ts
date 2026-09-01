@@ -273,6 +273,7 @@ export async function getInspectionDetail(id: string) {
       vehicleId: inspections.vehicleId,
       placa: vehicles.placa,
       modelo: vehicles.modelo,
+      performedById: inspections.performedById,
       performedByNome: users.name,
     })
     .from(inspections)
@@ -326,6 +327,85 @@ export async function getInspectionDetail(id: string) {
   }));
 
   return { inspection, items: itemsWithPhotos };
+}
+
+/**
+ * Últimas conferências feitas por um usuário (qualquer veículo), usada na
+ * tela "Meu veículo" para o condutor conseguir abrir e, se precisar,
+ * excluir um checklist que ele mesmo fez errado.
+ */
+export async function listRecentInspectionsByUser(userId: string, limit = 5) {
+  const rows = await db
+    .select({
+      id: inspections.id,
+      km: inspections.km,
+      status: inspections.status,
+      createdAt: inspections.createdAt,
+      vehicleId: inspections.vehicleId,
+      placa: vehicles.placa,
+      modelo: vehicles.modelo,
+    })
+    .from(inspections)
+    .leftJoin(vehicles, eq(inspections.vehicleId, vehicles.id))
+    .where(eq(inspections.performedById, userId))
+    .orderBy(desc(inspections.createdAt))
+    .limit(limit);
+
+  return rows;
+}
+
+/**
+ * Exclui uma conferência (checklist) inteira: itens, fotos, e a
+ * ocorrência/registro de manutenção gerados por ela, se houver (uma
+ * conferência com avaria cria uma ocorrência, que por sua vez bloqueia a
+ * exclusão da conferência via chave estrangeira até ser removida primeiro).
+ * Depois recalcula a quilometragem atual do veículo a partir das
+ * conferências que sobraram — se essa era a única/mais recente, a
+ * quilometragem anterior não fica registrada em lugar nenhum, então nesse
+ * caso ela é mantida como está (o admin pode ajustar em "Editar veículo").
+ */
+export async function deleteInspection(inspectionId: string) {
+  return db.transaction(async (tx) => {
+    const [inspection] = await tx
+      .select({
+        id: inspections.id,
+        vehicleId: inspections.vehicleId,
+        performedById: inspections.performedById,
+      })
+      .from(inspections)
+      .where(eq(inspections.id, inspectionId))
+      .limit(1);
+    if (!inspection) return null;
+
+    const [occurrence] = await tx
+      .select({ id: occurrences.id })
+      .from(occurrences)
+      .where(eq(occurrences.inspectionId, inspectionId))
+      .limit(1);
+
+    if (occurrence) {
+      await tx
+        .delete(maintenanceRecords)
+        .where(eq(maintenanceRecords.occurrenceId, occurrence.id));
+      await tx.delete(occurrences).where(eq(occurrences.id, occurrence.id));
+    }
+
+    await tx.delete(inspections).where(eq(inspections.id, inspectionId));
+
+    const [{ maxKm }] = await tx
+      .select({ maxKm: sql<number | null>`max(${inspections.km})` })
+      .from(inspections)
+      .where(eq(inspections.vehicleId, inspection.vehicleId));
+
+    if (maxKm != null) {
+      await tx
+        .update(vehicles)
+        .set({ kmAtual: maxKm })
+        .where(eq(vehicles.id, inspection.vehicleId));
+    }
+
+    return inspection;
+  });
 }
 
 export async function listOccurrences(opts: {

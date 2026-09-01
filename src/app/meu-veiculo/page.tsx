@@ -2,12 +2,15 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
-import { listVehiclesForCondutor } from "@/lib/queries";
+import { listVehiclesForCondutor, listRecentInspectionsByUser } from "@/lib/queries";
 import { formatKm } from "@/lib/domain";
 
 export default async function MeuVeiculoPage() {
   const session = await requireUser(["CONDUTOR"]);
-  const vehicles = await listVehiclesForCondutor(session.id);
+  const [vehicles, recentInspections] = await Promise.all([
+    listVehiclesForCondutor(session.id),
+    listRecentInspectionsByUser(session.id, 5),
+  ]);
 
   return (
     <AppShell session={session}>
@@ -66,6 +69,47 @@ export default async function MeuVeiculoPage() {
             </div>
           ))}
         </div>
+
+        {recentInspections.length > 0 && (
+          <div className="mt-8">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Minhas últimas conferências
+            </h2>
+            <p className="mb-3 text-xs text-slate-500">
+              Errou algo em um checklist? Abra e exclua para refazer.
+            </p>
+            <div className="space-y-2">
+              {recentInspections.map((i) => (
+                <Link
+                  key={i.id}
+                  href={`/veiculos/${i.vehicleId}/checklist/${i.id}`}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-slate-300"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      {i.placa} ·{" "}
+                      {new Date(i.createdAt).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })}{" "}
+                      · {formatKm(i.km)}
+                    </p>
+                  </div>
+                  {i.status === "COM_AVARIA" ? (
+                    <Badge className="bg-red-50 text-red-700 ring-red-600/20">
+                      Com avaria
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-emerald-50 text-emerald-700 ring-emerald-600/20">
+                      OK
+                    </Badge>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
