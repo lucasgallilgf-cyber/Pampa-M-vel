@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
-import { getOccurrenceDetail } from "@/lib/queries";
+import { getOccurrenceDetail, listUsers } from "@/lib/queries";
 import {
   OCCURRENCE_STATUS_LABELS,
   OCCURRENCE_STATUS_STYLES,
@@ -16,10 +16,14 @@ export default async function OccurrenceDetailPage(
 ) {
   const session = await requireUser();
   const { id } = await props.params;
-  const data = await getOccurrenceDetail(id);
+  const [data, supervisores, gerentes] = await Promise.all([
+    getOccurrenceDetail(id),
+    listUsers({ role: "SUPERVISOR" }),
+    listUsers({ role: "GERENTE" }),
+  ]);
   if (!data) notFound();
 
-  const { occurrence, signatures, avariaItems, photos } = data;
+  const { occurrence, signatures, signatureLinks, avariaItems, photos } = data;
 
   return (
     <AppShell session={session}>
@@ -42,9 +46,17 @@ export default async function OccurrenceDetailPage(
               {new Date(occurrence.createdAt).toLocaleDateString("pt-BR")}
             </p>
           </div>
-          <Badge className={OCCURRENCE_STATUS_STYLES[occurrence.status]}>
-            {OCCURRENCE_STATUS_LABELS[occurrence.status]}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge className={OCCURRENCE_STATUS_STYLES[occurrence.status]}>
+              {OCCURRENCE_STATUS_LABELS[occurrence.status]}
+            </Badge>
+            <a
+              href={`/ocorrencias/${occurrence.id}/pdf`}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Baixar PDF
+            </a>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -127,8 +139,14 @@ export default async function OccurrenceDetailPage(
             <SignaturePanel
               occurrenceId={occurrence.id}
               signatures={signatures}
+              signatureLinks={signatureLinks}
               session={session}
               status={occurrence.status}
+              vehiclePlaca={occurrence.placa ?? ""}
+              performedById={occurrence.performedById}
+              performedByNome={occurrence.performedByNome}
+              supervisores={supervisores}
+              gerentes={gerentes}
             />
           </div>
         </div>

@@ -6,3 +6,8 @@ export function createId(): string {
   const rand = randomBytes(9).toString("hex");
   return `${time}${rand}`;
 }
+
+/** Long random token for public, unauthenticated links (signature links). */
+export function createToken(): string {
+  return randomBytes(24).toString("base64url");
+}

@@ -226,6 +226,43 @@ export const vehicleTransfers = pgTable(
   (t) => [index("vehicle_transfers_vehicle_idx").on(t.vehicleId)]
 );
 
+/**
+ * Link de assinatura sem login — gerado pelo Admin/Supervisor pra mandar por
+ * WhatsApp pra quem precisa assinar (condutor/supervisor/gerente) mas não
+ * necessariamente usa o sistema no dia a dia. Um link vale pra uma etapa
+ * (occurrenceId + role) e um usuário específico (userId) — quem abre o link
+ * não escolhe quem está assinando, isso já foi decidido por quem gerou o
+ * link. Regenerar o link pra mesma etapa substitui o token anterior (ver
+ * índice único abaixo), então links antigos enviados por engano deixam de
+ * funcionar sozinhos.
+ */
+export const signatureLinks = pgTable(
+  "signature_links",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    token: text("token").notNull().unique(),
+    occurrenceId: text("occurrence_id")
+      .notNull()
+      .references(() => occurrences.id, { onDelete: "cascade" }),
+    role: signatureRoleEnum("role").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    createdById: text("created_by_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at"),
+    usedAt: timestamp("used_at"),
+  },
+  (t) => [
+    uniqueIndex("signature_links_occurrence_role_idx").on(
+      t.occurrenceId,
+      t.role
+    ),
+  ]
+);
+
 export const maintenanceRecords = pgTable("maintenance_records", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   occurrenceId: text("occurrence_id")

@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { occurrences, signatures, maintenanceRecords } from "@/db/schema";
-import { getSession } from "@/lib/auth";
-import { SIGNATURE_ORDER } from "@/lib/domain";
+import { occurrences, maintenanceRecords } from "@/db/schema";
+import { getSession, requireUser } from "@/lib/auth";
 import { storePhoto } from "@/lib/storage";
+import {
+  recordOccurrenceSignature,
+  createOrRefreshSignatureLink,
+} from "@/lib/queries";
 
 export type ActionState = { error: string | null; ok?: boolean };
 
@@ -37,49 +40,46 @@ export async function signOccurrenceAction(
     };
   }
 
-  const existing = await db
-    .select()
-    .from(signatures)
-    .where(eq(signatures.occurrenceId, occurrenceId));
-
-  const stepIndex = SIGNATURE_ORDER.indexOf(role);
-  for (let i = 0; i < stepIndex; i++) {
-    const requiredRole = SIGNATURE_ORDER[i];
-    if (!existing.some((s) => s.role === requiredRole)) {
-      return {
-        error: `A assinatura de "${requiredRole}" precisa ocorrer primeiro.`,
-      };
-    }
-  }
-  if (existing.some((s) => s.role === role)) {
-    return { error: "Esta etapa já foi assinada." };
-  }
-
   const signatureImageUrl = await storePhoto(
     signatureImage,
     `assinaturas/${occurrenceId}`
   );
 
-  await db.insert(signatures).values({
+  const result = await recordOccurrenceSignature({
     occurrenceId,
     role,
     userId: session.id,
     userNameSnap: session.name,
     signatureImageUrl,
   });
-
-  const totalSigned = existing.length + 1;
-  if (totalSigned === SIGNATURE_ORDER.length) {
-    await db
-      .update(occurrences)
-      .set({ status: "EM_ANDAMENTO" })
-      .where(
-        and(eq(occurrences.id, occurrenceId), eq(occurrences.status, "PENDENTE"))
-      );
-  }
+  if (result.error) return result;
 
   revalidatePath(`/ocorrencias/${occurrenceId}`);
   return { error: null, ok: true };
+}
+
+/**
+ * Gera (ou renova) o link de assinatura sem login pra uma etapa —
+ * pra mandar por WhatsApp. Só Admin/Supervisor/Gerente podem gerar.
+ */
+export async function createSignatureLinkAction(params: {
+  occurrenceId: string;
+  role: "CONDUTOR" | "SUPERVISOR" | "GERENTE";
+  userId: string;
+}): Promise<{ error: string | null; token?: string }> {
+  const session = await requireUser(["ADMIN", "SUPERVISOR", "GERENTE"]);
+  const { occurrenceId, role, userId } = params;
+  if (!occurrenceId || !role || !userId) {
+    return { error: "Dados incompletos." };
+  }
+  const token = await createOrRefreshSignatureLink({
+    occurrenceId,
+    role,
+    userId,
+    createdById: session.id,
+  });
+  revalidatePath(`/ocorrencias/${occurrenceId}`);
+  return { error: null, token };
 }
 
 export async function resolveOccurrenceAction(

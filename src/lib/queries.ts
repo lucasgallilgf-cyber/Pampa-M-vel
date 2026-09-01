@@ -8,6 +8,7 @@ import {
   occurrences,
   users,
   signatures,
+  signatureLinks,
   maintenanceRecords,
   photos,
   userFiliais,
@@ -15,7 +16,8 @@ import {
 } from "@/db/schema";
 import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
-import { currentMonthRange } from "./domain";
+import { currentMonthRange, SIGNATURE_ORDER, SIGNATURE_ROLE_LABELS } from "./domain";
+import { createToken } from "./id";
 
 export async function listVehicles(
   opts: {
@@ -565,6 +567,7 @@ export async function listOccurrences(opts: {
 }
 
 export async function getOccurrenceDetail(id: string) {
+  const performers = alias(users, "performers");
   const [occurrence] = await db
     .select({
       id: occurrences.id,
@@ -581,11 +584,14 @@ export async function getOccurrenceDetail(id: string) {
       assignedCondutorId: vehicles.assignedCondutorId,
       inspectionId: occurrences.inspectionId,
       km: inspections.km,
+      performedById: inspections.performedById,
+      performedByNome: performers.name,
     })
     .from(occurrences)
     .leftJoin(vehicles, eq(occurrences.vehicleId, vehicles.id))
     .leftJoin(filiais, eq(vehicles.filialId, filiais.id))
     .leftJoin(inspections, eq(occurrences.inspectionId, inspections.id))
+    .leftJoin(performers, eq(inspections.performedById, performers.id))
     .where(eq(occurrences.id, id))
     .limit(1);
 
@@ -595,6 +601,11 @@ export async function getOccurrenceDetail(id: string) {
     .select()
     .from(signatures)
     .where(eq(signatures.occurrenceId, id));
+
+  const linkRows = await db
+    .select()
+    .from(signatureLinks)
+    .where(eq(signatureLinks.occurrenceId, id));
 
   const itemRows = await db
     .select({
@@ -620,9 +631,110 @@ export async function getOccurrenceDetail(id: string) {
   return {
     occurrence,
     signatures: signatureRows,
+    signatureLinks: linkRows,
     avariaItems: itemRows,
     photos: photoRows,
   };
+}
+
+/**
+ * Registra uma assinatura de ocorrência respeitando a ordem obrigatória
+ * (condutor → supervisor → gerente) — usado tanto pelo fluxo normal
+ * (usuário logado assinando a própria etapa) quanto pelo link de assinatura
+ * sem login, pra não duplicar a validação de ordem/duplicidade nos dois
+ * lugares.
+ */
+export async function recordOccurrenceSignature(params: {
+  occurrenceId: string;
+  role: "CONDUTOR" | "SUPERVISOR" | "GERENTE";
+  userId: string;
+  userNameSnap: string;
+  signatureImageUrl: string;
+}): Promise<{ error: string | null }> {
+  const { occurrenceId, role, userId, userNameSnap, signatureImageUrl } = params;
+
+  const existing = await db
+    .select()
+    .from(signatures)
+    .where(eq(signatures.occurrenceId, occurrenceId));
+
+  const stepIndex = SIGNATURE_ORDER.indexOf(role);
+  for (let i = 0; i < stepIndex; i++) {
+    const requiredRole = SIGNATURE_ORDER[i];
+    if (!existing.some((s) => s.role === requiredRole)) {
+      return {
+        error: `A assinatura de "${SIGNATURE_ROLE_LABELS[requiredRole]}" precisa ocorrer primeiro.`,
+      };
+    }
+  }
+  if (existing.some((s) => s.role === role)) {
+    return { error: "Esta etapa já foi assinada." };
+  }
+
+  await db
+    .insert(signatures)
+    .values({ occurrenceId, role, userId, userNameSnap, signatureImageUrl });
+
+  const totalSigned = existing.length + 1;
+  if (totalSigned === SIGNATURE_ORDER.length) {
+    await db
+      .update(occurrences)
+      .set({ status: "EM_ANDAMENTO" })
+      .where(
+        and(eq(occurrences.id, occurrenceId), eq(occurrences.status, "PENDENTE"))
+      );
+  }
+
+  return { error: null };
+}
+
+/**
+ * Cria (ou substitui, se já existir uma pra essa etapa) um link de
+ * assinatura sem login pra mandar por WhatsApp. Válido por 30 dias.
+ */
+export async function createOrRefreshSignatureLink(params: {
+  occurrenceId: string;
+  role: "CONDUTOR" | "SUPERVISOR" | "GERENTE";
+  userId: string;
+  createdById: string;
+}): Promise<string> {
+  const { occurrenceId, role, userId, createdById } = params;
+  const token = createToken();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  await db
+    .insert(signatureLinks)
+    .values({ token, occurrenceId, role, userId, createdById, expiresAt })
+    .onConflictDoUpdate({
+      target: [signatureLinks.occurrenceId, signatureLinks.role],
+      set: { token, userId, createdById, expiresAt, usedAt: null, createdAt: new Date() },
+    });
+
+  return token;
+}
+
+export async function getSignatureLinkDetail(token: string) {
+  const [link] = await db
+    .select({
+      id: signatureLinks.id,
+      occurrenceId: signatureLinks.occurrenceId,
+      role: signatureLinks.role,
+      userId: signatureLinks.userId,
+      userNome: users.name,
+      expiresAt: signatureLinks.expiresAt,
+      usedAt: signatureLinks.usedAt,
+    })
+    .from(signatureLinks)
+    .leftJoin(users, eq(signatureLinks.userId, users.id))
+    .where(eq(signatureLinks.token, token))
+    .limit(1);
+
+  if (!link) return null;
+
+  const detail = await getOccurrenceDetail(link.occurrenceId);
+  if (!detail) return null;
+
+  return { link, ...detail };
 }
 
 export async function listMaintenanceRecords(opts: {

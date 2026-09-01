@@ -6,6 +6,7 @@ import { signOccurrenceAction, resolveOccurrenceAction } from "./actions";
 import { SIGNATURE_ORDER, SIGNATURE_ROLE_LABELS } from "@/lib/domain";
 import type { SessionPayload } from "@/lib/auth";
 import SignaturePad from "./SignaturePad";
+import SignatureLinkPanel from "./SignatureLinkPanel";
 
 type Signature = {
   id: string;
@@ -15,16 +16,38 @@ type Signature = {
   signedAt: string | Date;
 };
 
+type SignatureLink = {
+  role: "CONDUTOR" | "SUPERVISOR" | "GERENTE";
+  usedAt: string | Date | null;
+  expiresAt: string | Date | null;
+};
+
+type Person = { id: string; name: string };
+
+const OVERSIGHT_ROLES = ["ADMIN", "SUPERVISOR", "GERENTE"];
+
 export default function SignaturePanel({
   occurrenceId,
   signatures,
+  signatureLinks,
   session,
   status,
+  vehiclePlaca,
+  performedById,
+  performedByNome,
+  supervisores,
+  gerentes,
 }: {
   occurrenceId: string;
   signatures: Signature[];
+  signatureLinks: SignatureLink[];
   session: SessionPayload;
   status: "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA";
+  vehiclePlaca: string;
+  performedById: string | null;
+  performedByNome: string | null;
+  supervisores: Person[];
+  gerentes: Person[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -35,6 +58,22 @@ export default function SignaturePanel({
 
   const signedRoles = new Set(signatures.map((s) => s.role));
   const allSigned = SIGNATURE_ORDER.every((r) => signedRoles.has(r));
+  const isOversight = OVERSIGHT_ROLES.includes(session.role);
+
+  function candidatesForRole(role: "CONDUTOR" | "SUPERVISOR" | "GERENTE") {
+    if (role === "SUPERVISOR") return supervisores;
+    if (role === "GERENTE") return gerentes;
+    return [];
+  }
+
+  function fixedCandidateForRole(
+    role: "CONDUTOR" | "SUPERVISOR" | "GERENTE"
+  ): Person | null {
+    if (role === "CONDUTOR" && performedById) {
+      return { id: performedById, name: performedByNome ?? "Condutor" };
+    }
+    return null;
+  }
 
   function handleConfirmSignature(
     role: "CONDUTOR" | "SUPERVISOR" | "GERENTE",
@@ -150,6 +189,22 @@ export default function SignaturePanel({
                     pending={isPending && pendingRole === role}
                     onCancel={() => setSigningRole(null)}
                     onConfirm={(file) => handleConfirmSignature(role, file)}
+                  />
+                </div>
+              )}
+
+              {!sig && priorSigned && isOversight && status !== "RESOLVIDA" && (
+                <div className="mt-2">
+                  <SignatureLinkPanel
+                    occurrenceId={occurrenceId}
+                    role={role}
+                    roleLabel={SIGNATURE_ROLE_LABELS[role]}
+                    vehiclePlaca={vehiclePlaca}
+                    fixedCandidate={fixedCandidateForRole(role)}
+                    candidates={candidatesForRole(role)}
+                    hasActiveLink={signatureLinks.some(
+                      (l) => l.role === role && !l.usedAt
+                    )}
                   />
                 </div>
               )}
