@@ -48,6 +48,7 @@ export default async function VehicleDetailPage(
           filiais={filiais}
           currentFilialId={vehicle.filialId}
           currentCentroCusto={vehicle.centroCusto}
+          currentCondutorNome={vehicle.condutorNome}
         />
       </div>
 

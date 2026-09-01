@@ -160,6 +160,7 @@ export async function transferVehicleAction(
   const id = formData.get("id")?.toString();
   const filialId = formData.get("filialId")?.toString();
   const centroCusto = formData.get("centroCusto")?.toString().trim() || null;
+  const condutorNome = formData.get("condutorNome")?.toString().trim() || null;
 
   if (!id || !filialId) {
     return { error: "Selecione a filial de destino." };
@@ -175,7 +176,7 @@ export async function transferVehicleAction(
   try {
     await db
       .update(vehicles)
-      .set({ filialId, centroCusto })
+      .set({ filialId, centroCusto, condutorNome })
       .where(eq(vehicles.id, id));
 
     await recordVehicleTransferIfChanged({
