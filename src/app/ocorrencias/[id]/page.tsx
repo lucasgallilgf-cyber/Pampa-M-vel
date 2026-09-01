@@ -49,6 +49,17 @@ export default async function OccurrenceDetailPage(
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            {occurrence.relato && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Relato do ocorrido
+                </h2>
+                <p className="whitespace-pre-wrap text-sm text-slate-700">
+                  {occurrence.relato}
+                </p>
+              </section>
+            )}
+
             <section className="rounded-xl border border-slate-200 bg-white p-4">
               <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
                 Descrição

@@ -88,6 +88,13 @@ async function submitChecklist(formData: FormData) {
   const avariaItems = pending.filter((p) => p.status === "AVARIA");
   const hasAvaria = avariaItems.length > 0;
 
+  const relato = formData.get("relato")?.toString().trim() || null;
+  if (hasAvaria && !relato) {
+    throw new Error(
+      "Descreva o que aconteceu no campo \"Relato do ocorrido\" antes de enviar o checklist."
+    );
+  }
+
   const [inspection] = await db
     .insert(inspections)
     .values({
@@ -106,7 +113,7 @@ async function submitChecklist(formData: FormData) {
 
     const [occurrence] = await db
       .insert(occurrences)
-      .values({ inspectionId: inspection.id, vehicleId, description })
+      .values({ inspectionId: inspection.id, vehicleId, description, relato })
       .returning();
     occurrenceId = occurrence.id;
 

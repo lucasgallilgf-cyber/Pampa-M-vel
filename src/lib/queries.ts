@@ -569,6 +569,7 @@ export async function getOccurrenceDetail(id: string) {
     .select({
       id: occurrences.id,
       description: occurrences.description,
+      relato: occurrences.relato,
       status: occurrences.status,
       createdAt: occurrences.createdAt,
       resolvedAt: occurrences.resolvedAt,

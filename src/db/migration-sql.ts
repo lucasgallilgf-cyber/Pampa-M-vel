@@ -218,4 +218,10 @@ export const INCREMENTAL_MIGRATIONS: { id: string; statements: string[] }[] = [
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
     ],
   },
+  {
+    id: "0008_occurrence_relato",
+    statements: [
+      `ALTER TABLE "occurrences" ADD COLUMN IF NOT EXISTS "relato" text;`,
+    ],
+  },
 ];

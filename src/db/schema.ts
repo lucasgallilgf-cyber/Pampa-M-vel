@@ -161,6 +161,7 @@ export const occurrences = pgTable(
       .notNull()
       .references(() => vehicles.id),
     description: text("description").notNull(),
+    relato: text("relato"),
     status: occurrenceStatusEnum("status").default("PENDENTE").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     resolvedAt: timestamp("resolved_at"),

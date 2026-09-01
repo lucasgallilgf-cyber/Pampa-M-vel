@@ -89,6 +89,7 @@ export default function ChecklistForm({
     )
   );
   const [km, setKm] = useState(String(vehicle.kmAtual));
+  const [relato, setRelato] = useState("");
   const [isCompressing, setIsCompressing] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
 
@@ -122,6 +123,13 @@ export default function ChecklistForm({
     if (semFoto) {
       setClientError(
         `Adicione pelo menos uma foto do item "${semFoto.label}" (marcado como avaria).`
+      );
+      return;
+    }
+
+    if (avariaCount > 0 && relato.trim().length === 0) {
+      setClientError(
+        "Descreva o que aconteceu no campo \"Relato do ocorrido\" antes de enviar."
       );
       return;
     }
@@ -292,6 +300,27 @@ export default function ChecklistForm({
           </div>
         ))}
       </div>
+
+      {avariaCount > 0 && (
+        <div className="mt-6 rounded-xl border border-red-200 bg-red-50/60 p-4">
+          <label className="mb-1 block text-sm font-medium text-red-800">
+            Relato do ocorrido (obrigatório)
+          </label>
+          <p className="mb-2 text-xs text-red-700">
+            Conte com suas palavras o que aconteceu — isso vira o documento
+            que o supervisor e o gerente vão ler e assinar junto com você.
+          </p>
+          <textarea
+            name="relato"
+            value={relato}
+            onChange={(e) => setRelato(e.target.value)}
+            required
+            rows={4}
+            placeholder="Ex: durante a conferência notei que o para-choque dianteiro está amassado, aparentemente de uma batida no estacionamento…"
+            className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-400"
+          />
+        </div>
+      )}
 
       <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
         <div className="text-sm">
