@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireUser, canAccessFilial } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  canAccessFilial,
+} from "@/lib/auth";
 import { getOccurrenceDetail } from "@/lib/queries";
 import { buildOccurrencePdf } from "@/lib/occurrencePdf";
 
@@ -14,7 +18,8 @@ export async function GET(
   if (!data) {
     return new NextResponse("Ocorrência não encontrada.", { status: 404 });
   }
-  if (!canAccessFilial(session, data.occurrence.filialId)) {
+  const allowedFilialIds = await getAllowedFilialIds(session);
+  if (!canAccessFilial(allowedFilialIds, data.occurrence.filialId)) {
     return new NextResponse("Ocorrência não encontrada.", { status: 404 });
   }
 

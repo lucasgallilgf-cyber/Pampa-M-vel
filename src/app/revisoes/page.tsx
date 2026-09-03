@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { requireUser, scopedFilialId } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  resolveFilialFilter,
+} from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import StatTile from "@/components/StatTile";
 import { listRevisionRows, listFiliais } from "@/lib/queries";
@@ -12,9 +16,12 @@ function strParam(v: string | string[] | undefined) {
 
 export default async function RevisoesPage(props: PageProps<"/revisoes">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
-  const isSupervisor = session.role === "SUPERVISOR";
+  const allowedFilialIds = await getAllowedFilialIds(session);
+  const isFixedFilial = allowedFilialIds !== null && allowedFilialIds.length <= 1;
+  const isMultiFilial = allowedFilialIds !== null && allowedFilialIds.length > 1;
   const searchParams = await props.searchParams;
-  const filialId = scopedFilialId(session, strParam(searchParams.filial));
+  const requestedFilial = strParam(searchParams.filial);
+  const filialIds = resolveFilialFilter(allowedFilialIds, requestedFilial);
   const q = strParam(searchParams.q);
   const status = strParam(searchParams.status) as
     | "PENDENTE"
@@ -24,9 +31,14 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
   const periodoFim = strParam(searchParams.fim);
 
   const [vehiclesRows, filiais] = await Promise.all([
-    listRevisionRows({ filialId, q }),
+    listRevisionRows({ filialIds, q }),
     listFiliais(),
   ]);
+
+  const fixedFilialId = isFixedFilial ? allowedFilialIds![0] ?? null : null;
+  const minhasFiliais = allowedFilialIds
+    ? filiais.filter((f) => allowedFilialIds.includes(f.id))
+    : [];
 
   let rows: RevisionRowData[] = vehiclesRows;
 
@@ -43,7 +55,7 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
   }
 
   const hasFilter = Boolean(
-    filialId || q || status || periodoInicio || periodoFim
+    (!isFixedFilial && requestedFilial) || q || status || periodoInicio || periodoFim
   );
 
   const totals = {
@@ -76,12 +88,25 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
             placeholder="Buscar placa ou modelo…"
             className="w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
           />
-          {isSupervisor ? (
-            <input type="hidden" name="filial" value={filialId ?? ""} />
+          {isFixedFilial ? (
+            <input type="hidden" name="filial" value={fixedFilialId ?? ""} />
+          ) : isMultiFilial ? (
+            <select
+              name="filial"
+              defaultValue={requestedFilial ?? ""}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Todas as minhas filiais</option>
+              {minhasFiliais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
           ) : (
             <select
               name="filial"
-              defaultValue={filialId ?? ""}
+              defaultValue={requestedFilial ?? ""}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
             >
               <option value="">Todas as filiais</option>

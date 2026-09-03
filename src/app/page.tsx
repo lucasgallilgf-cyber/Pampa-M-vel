@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { getSession, scopedFilialId } from "@/lib/auth";
+import {
+  getSession,
+  getAllowedFilialIds,
+  resolveFilialFilter,
+} from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import StatTile from "@/components/StatTile";
@@ -94,12 +98,13 @@ export default async function HomePage(props: PageProps<"/">) {
     );
   }
 
-  const isSupervisor = session.role === "SUPERVISOR";
+  const allowedFilialIds = await getAllowedFilialIds(session);
+  const isFixedFilial = allowedFilialIds !== null && allowedFilialIds.length <= 1;
+  const isMultiFilial = allowedFilialIds !== null && allowedFilialIds.length > 1;
   const searchParams = await props.searchParams;
-  const filialId = scopedFilialId(
-    session,
-    typeof searchParams.filial === "string" ? searchParams.filial : undefined
-  );
+  const requestedFilial =
+    typeof searchParams.filial === "string" ? searchParams.filial : undefined;
+  const filialIds = resolveFilialFilter(allowedFilialIds, requestedFilial);
 
   const [
     stats,
@@ -111,15 +116,20 @@ export default async function HomePage(props: PageProps<"/">) {
     filiais,
     revisionAlert,
   ] = await Promise.all([
-    getDashboardStats({ filialId }),
-    getDashboardByFilial({ filialId }),
-    getDashboardByPeriod(6, { filialId }),
-    getVehicleCountByCentroCusto({ filialId }),
-    getVehicleCountByModelo({ filialId }),
-    pendingVehiclesThisMonth(8, { filialId }),
+    getDashboardStats({ filialIds }),
+    getDashboardByFilial({ filialIds }),
+    getDashboardByPeriod(6, { filialIds }),
+    getVehicleCountByCentroCusto({ filialIds }),
+    getVehicleCountByModelo({ filialIds }),
+    pendingVehiclesThisMonth(8, { filialIds }),
     listFiliais(),
-    getRevisionAlertSummary({ filialId, limit: 8 }),
+    getRevisionAlertSummary({ filialIds, limit: 8 }),
   ]);
+
+  const fixedFilialId = isFixedFilial ? allowedFilialIds![0] ?? null : null;
+  const minhasFiliais = allowedFilialIds
+    ? filiais.filter((f) => allowedFilialIds.includes(f.id))
+    : [];
 
   const frotaPorFilial = byFilial
     .map((f) => ({ label: f.filialNome, count: f.totalVeiculos }))
@@ -144,19 +154,24 @@ export default async function HomePage(props: PageProps<"/">) {
             Visão geral atualizada automaticamente a cada conferência.
           </p>
         </div>
-        {isSupervisor ? (
+        {isFixedFilial ? (
           <p className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-            Filial: {filiais.find((f) => f.id === filialId)?.nome ?? "—"}
+            Filial:{" "}
+            {fixedFilialId
+              ? filiais.find((f) => f.id === fixedFilialId)?.nome ?? "—"
+              : "—"}
           </p>
         ) : (
           <form method="GET" className="flex items-center gap-2">
             <select
               name="filial"
-              defaultValue={filialId ?? ""}
+              defaultValue={requestedFilial ?? ""}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
             >
-              <option value="">Todas as filiais</option>
-              {filiais.map((f) => (
+              <option value="">
+                {isMultiFilial ? "Todas as minhas filiais" : "Todas as filiais"}
+              </option>
+              {(isMultiFilial ? minhasFiliais : filiais).map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.nome}
                 </option>

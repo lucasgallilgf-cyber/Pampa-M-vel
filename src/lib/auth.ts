@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { listUserFiliaisIds } from "./queries";
 
 export const SESSION_COOKIE = "frota_session";
 const alg = "HS256";
@@ -63,33 +64,63 @@ export async function requireUser(
 // this module pulls in next/headers and cannot be bundled into client code.
 export { ROLE_LABELS } from "./domain";
 
-// Sentinel filialId that never matches a real row — used so a SUPERVISOR
-// without filial cadastrada vê a lista vazia em vez de ver tudo (undefined
-// nas queries desativa o filtro por completo).
+// Sentinel filialId que nunca bate com uma filial real — usado quando um
+// SUPERVISOR não tem nenhuma filial cadastrada (nem principal, nem
+// adicional), pra ele ver a lista vazia em vez de ver tudo (undefined nas
+// queries desativa o filtro por completo, o que seria o oposto do queremos).
 const NO_FILIAL_SENTINEL = "__sem_filial_cadastrada__";
 
 /**
- * SUPERVISOR só pode ver/filtrar pela própria filial (a "filial principal"
- * do cadastro) — nunca as demais, mesmo tentando trocar o filtro pela URL.
- * As outras roles (ADMIN, GERENTE) continuam livres para escolher qualquer
- * filial ou "todas", então `requested` só é respeitado nesse caso.
+ * Filiais que um SUPERVISOR pode ver/filtrar: a "filial principal" do
+ * cadastro + qualquer uma marcada em "outras filiais que este usuário
+ * também gerencia". Busca sempre no banco (não fica salvo no token de
+ * sessão) pra uma mudança no cadastro valer imediatamente, sem precisar
+ * esperar o usuário logar de novo.
+ *
+ * Retorna `null` pra ADMIN/GERENTE — sinal de "sem restrição", livre pra
+ * ver/filtrar qualquer filial.
  */
-export function scopedFilialId(
-  session: SessionPayload,
+export async function getAllowedFilialIds(
+  session: SessionPayload
+): Promise<string[] | null> {
+  if (session.role !== "SUPERVISOR") return null;
+  const extras = await listUserFiliaisIds(session.id);
+  const ids = new Set(extras);
+  if (session.filialId) ids.add(session.filialId);
+  return Array.from(ids);
+}
+
+/**
+ * A partir das filiais permitidas (`null` = sem restrição) e do que foi
+ * pedido no filtro da tela, decide quais filiais efetivamente usar na
+ * consulta: sem restrição, respeita o pedido (ou nenhum, pra "todas");
+ * restrito, só aceita um pedido que esteja dentro do permitido — senão
+ * (nada pedido, ou pedido fora do permitido) usa o conjunto inteiro
+ * permitido, pra mostrar os dados combinados de todas as filiais dele.
+ */
+export function resolveFilialFilter(
+  allowedFilialIds: string[] | null,
   requested?: string
-): string | undefined {
-  if (session.role === "SUPERVISOR") {
-    return session.filialId ?? NO_FILIAL_SENTINEL;
+): string[] | undefined {
+  if (allowedFilialIds === null) {
+    return requested ? [requested] : undefined;
   }
-  return requested;
+  if (allowedFilialIds.length === 0) {
+    return [NO_FILIAL_SENTINEL];
+  }
+  if (requested && allowedFilialIds.includes(requested)) {
+    return [requested];
+  }
+  return allowedFilialIds;
 }
 
 /** Usado nas páginas de detalhe (veículo, conferência, ocorrência) pra
- * bloquear acesso direto por URL a algo fora da filial do SUPERVISOR. */
+ * bloquear acesso direto por URL a algo fora das filiais permitidas do
+ * SUPERVISOR. */
 export function canAccessFilial(
-  session: SessionPayload,
+  allowedFilialIds: string[] | null,
   filialId: string | null | undefined
 ): boolean {
-  if (session.role !== "SUPERVISOR") return true;
-  return !!filialId && filialId === session.filialId;
+  if (allowedFilialIds === null) return true;
+  return !!filialId && allowedFilialIds.includes(filialId);
 }

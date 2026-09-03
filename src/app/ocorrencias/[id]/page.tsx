@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser, canAccessFilial } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  canAccessFilial,
+} from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import { getOccurrenceDetail, listUsers } from "@/lib/queries";
@@ -22,7 +26,8 @@ export default async function OccurrenceDetailPage(
     listUsers({ role: "GERENTE" }),
   ]);
   if (!data) notFound();
-  if (!canAccessFilial(session, data.occurrence.filialId)) notFound();
+  const allowedFilialIds = await getAllowedFilialIds(session);
+  if (!canAccessFilial(allowedFilialIds, data.occurrence.filialId)) notFound();
 
   const { occurrence, signatures, signatureLinks, avariaItems, photos } = data;
 

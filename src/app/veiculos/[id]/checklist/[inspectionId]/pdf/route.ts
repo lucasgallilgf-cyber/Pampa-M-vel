@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireUser, canAccessFilial } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  canAccessFilial,
+} from "@/lib/auth";
 import { getInspectionDetail } from "@/lib/queries";
 import { buildInspectionPdf } from "@/lib/inspectionPdf";
 
@@ -17,9 +21,10 @@ export async function GET(
     return new NextResponse("Conferência não encontrada.", { status: 404 });
   }
 
+  const allowedFilialIds = await getAllowedFilialIds(session);
   const isOversight =
     OVERSIGHT_ROLES.includes(session.role) &&
-    canAccessFilial(session, data.inspection.filialId);
+    canAccessFilial(allowedFilialIds, data.inspection.filialId);
   const isOwner = data.inspection.performedById === session.id;
   if (!isOversight && !isOwner) {
     return new NextResponse("Não autorizado.", { status: 403 });

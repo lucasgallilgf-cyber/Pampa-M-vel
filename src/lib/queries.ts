@@ -28,7 +28,7 @@ import { createToken } from "./id";
 
 export async function listVehicles(
   opts: {
-    filialId?: string;
+    filialIds?: string[];
     q?: string;
     modelo?: string;
     centroCusto?: string;
@@ -37,7 +37,7 @@ export async function listVehicles(
   } = {}
 ) {
   const { start, end } = currentMonthRange();
-  const { filialId, q, modelo, centroCusto, status, avarias } = opts;
+  const { filialIds, q, modelo, centroCusto, status, avarias } = opts;
 
   const conferidoExpr = sql<boolean>`bool_or(${inspections.createdAt} >= ${start.toISOString()}::timestamptz and ${inspections.createdAt} < ${end.toISOString()}::timestamptz)`;
   const avariasAbertasExpr = sql<number>`count(distinct case when ${occurrences.status} != 'RESOLVIDA' then ${occurrences.id} end)::int`;
@@ -63,7 +63,9 @@ export async function listVehicles(
     .leftJoin(occurrences, eq(occurrences.vehicleId, vehicles.id))
     .where(
       and(
-        filialId ? eq(vehicles.filialId, filialId) : undefined,
+        filialIds && filialIds.length > 0
+          ? inArray(vehicles.filialId, filialIds)
+          : undefined,
         modelo ? eq(vehicles.modelo, modelo) : undefined,
         centroCusto
           ? centroCusto === "__SEM__"
@@ -547,9 +549,9 @@ export async function deleteInspection(inspectionId: string) {
 
 export async function listOccurrences(opts: {
   status?: "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA";
-  filialId?: string;
+  filialIds?: string[];
 } = {}) {
-  const { status, filialId } = opts;
+  const { status, filialIds } = opts;
   const rows = await db
     .select({
       id: occurrences.id,
@@ -568,7 +570,9 @@ export async function listOccurrences(opts: {
     .where(
       and(
         status ? eq(occurrences.status, status) : undefined,
-        filialId ? eq(vehicles.filialId, filialId) : undefined
+        filialIds && filialIds.length > 0
+          ? inArray(vehicles.filialId, filialIds)
+          : undefined
       )
     )
     .orderBy(desc(occurrences.createdAt));
@@ -780,9 +784,9 @@ export async function getSignatureLinkDetail(token: string) {
 
 export async function listMaintenanceRecords(opts: {
   status?: "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA";
-  filialId?: string;
+  filialIds?: string[];
 } = {}) {
-  const { status, filialId } = opts;
+  const { status, filialIds } = opts;
   return db
     .select({
       id: maintenanceRecords.id,
@@ -802,15 +806,18 @@ export async function listMaintenanceRecords(opts: {
     .where(
       and(
         status ? eq(maintenanceRecords.status, status) : undefined,
-        filialId ? eq(vehicles.filialId, filialId) : undefined
+        filialIds && filialIds.length > 0
+          ? inArray(vehicles.filialId, filialIds)
+          : undefined
       )
     )
     .orderBy(desc(maintenanceRecords.createdAt));
 }
 
-export async function getDashboardStats(opts: { filialId?: string } = {}) {
+export async function getDashboardStats(opts: { filialIds?: string[] } = {}) {
   const { start, end } = currentMonthRange();
-  const { filialId } = opts;
+  const { filialIds } = opts;
+  const hasFilial = !!filialIds && filialIds.length > 0;
 
   const [fleet] = await db
     .select({
@@ -818,7 +825,7 @@ export async function getDashboardStats(opts: { filialId?: string } = {}) {
       kmTotal: sql<number>`coalesce(sum(${vehicles.kmAtual}), 0)::int`,
     })
     .from(vehicles)
-    .where(filialId ? eq(vehicles.filialId, filialId) : undefined);
+    .where(hasFilial ? inArray(vehicles.filialId, filialIds) : undefined);
 
   const [conferidosRow] = await db
     .select({
@@ -830,7 +837,7 @@ export async function getDashboardStats(opts: { filialId?: string } = {}) {
       and(
         gte(inspections.createdAt, start),
         lt(inspections.createdAt, end),
-        filialId ? eq(vehicles.filialId, filialId) : undefined
+        hasFilial ? inArray(vehicles.filialId, filialIds) : undefined
       )
     );
 
@@ -843,7 +850,7 @@ export async function getDashboardStats(opts: { filialId?: string } = {}) {
     })
     .from(occurrences)
     .leftJoin(vehicles, eq(occurrences.vehicleId, vehicles.id))
-    .where(filialId ? eq(vehicles.filialId, filialId) : undefined);
+    .where(hasFilial ? inArray(vehicles.filialId, filialIds) : undefined);
 
   const totalVeiculos = fleet?.totalVeiculos ?? 0;
   const conferidos = conferidosRow?.conferidos ?? 0;
@@ -865,9 +872,9 @@ export async function getDashboardStats(opts: { filialId?: string } = {}) {
   };
 }
 
-export async function getDashboardByFilial(opts: { filialId?: string } = {}) {
+export async function getDashboardByFilial(opts: { filialIds?: string[] } = {}) {
   const { start, end } = currentMonthRange();
-  const { filialId } = opts;
+  const { filialIds } = opts;
 
   const rows = await db
     .select({
@@ -881,7 +888,9 @@ export async function getDashboardByFilial(opts: { filialId?: string } = {}) {
     .leftJoin(vehicles, eq(vehicles.filialId, filiais.id))
     .leftJoin(inspections, eq(inspections.vehicleId, vehicles.id))
     .leftJoin(occurrences, eq(occurrences.vehicleId, vehicles.id))
-    .where(filialId ? eq(filiais.id, filialId) : undefined)
+    .where(
+      filialIds && filialIds.length > 0 ? inArray(filiais.id, filialIds) : undefined
+    )
     .groupBy(filiais.id, filiais.nome)
     .orderBy(filiais.nome);
 
@@ -896,9 +905,13 @@ export async function getDashboardByFilial(opts: { filialId?: string } = {}) {
 
 export async function getDashboardByPeriod(
   months = 6,
-  opts: { filialId?: string } = {}
+  opts: { filialIds?: string[] } = {}
 ) {
-  const { filialId } = opts;
+  const { filialIds } = opts;
+  const filialCond =
+    filialIds && filialIds.length > 0
+      ? sql`and v.filial_id in (${sql.join(filialIds.map((id) => sql`${id}`), sql`, `)})`
+      : sql``;
   const rows = await db.execute<{
     mes: string;
     conferidos: number;
@@ -914,35 +927,43 @@ export async function getDashboardByPeriod(
     where i.created_at >= date_trunc('month', now()) - interval '${sql.raw(
       String(months - 1)
     )} months'
-    ${filialId ? sql`and v.filial_id = ${filialId}` : sql``}
+    ${filialCond}
     group by 1
     order by 1
   `);
   return rows as unknown as { mes: string; conferidos: number; avarias: number }[];
 }
 
-export async function getVehicleCountByCentroCusto(opts: { filialId?: string } = {}) {
-  const { filialId } = opts;
+export async function getVehicleCountByCentroCusto(opts: { filialIds?: string[] } = {}) {
+  const { filialIds } = opts;
+  const filialCond =
+    filialIds && filialIds.length > 0
+      ? sql`where ${vehicles.filialId} in (${sql.join(filialIds.map((id) => sql`${id}`), sql`, `)})`
+      : sql``;
   const rows = await db.execute<{ centroCusto: string; total: number }>(sql`
     select
       coalesce(nullif(trim(${vehicles.centroCusto}), ''), 'Sem centro de custo') as "centroCusto",
       count(*)::int as total
     from ${vehicles}
-    ${filialId ? sql`where ${vehicles.filialId} = ${filialId}` : sql``}
+    ${filialCond}
     group by 1
     order by total desc, "centroCusto"
   `);
   return rows as unknown as { centroCusto: string; total: number }[];
 }
 
-export async function getVehicleCountByModelo(opts: { filialId?: string } = {}) {
-  const { filialId } = opts;
+export async function getVehicleCountByModelo(opts: { filialIds?: string[] } = {}) {
+  const { filialIds } = opts;
+  const filialCond =
+    filialIds && filialIds.length > 0
+      ? sql`where ${vehicles.filialId} in (${sql.join(filialIds.map((id) => sql`${id}`), sql`, `)})`
+      : sql``;
   const rows = await db.execute<{ modelo: string; total: number }>(sql`
     select
       ${vehicles.modelo} as modelo,
       count(*)::int as total
     from ${vehicles}
-    ${filialId ? sql`where ${vehicles.filialId} = ${filialId}` : sql``}
+    ${filialCond}
     group by 1
     order by total desc, modelo
   `);
@@ -1000,10 +1021,10 @@ export async function getExampleDataSummary(currentUserId: string) {
 
 export async function pendingVehiclesThisMonth(
   limit = 50,
-  opts: { filialId?: string } = {}
+  opts: { filialIds?: string[] } = {}
 ) {
   const { start, end } = currentMonthRange();
-  const { filialId } = opts;
+  const { filialIds } = opts;
   const rows = await db
     .select({
       id: vehicles.id,
@@ -1021,7 +1042,9 @@ export async function pendingVehiclesThisMonth(
           and ${inspections.createdAt} >= ${start.toISOString()}::timestamptz
           and ${inspections.createdAt} < ${end.toISOString()}::timestamptz
         )`,
-        filialId ? eq(vehicles.filialId, filialId) : undefined
+        filialIds && filialIds.length > 0
+          ? inArray(vehicles.filialId, filialIds)
+          : undefined
       )
     )
     .orderBy(vehicles.placa)
@@ -1036,9 +1059,9 @@ export async function pendingVehiclesThisMonth(
  * já que dependem do kmAtual de cada veículo, que muda a cada checklist.
  */
 export async function listVehiclesForRevisions(
-  opts: { filialId?: string; q?: string } = {}
+  opts: { filialIds?: string[]; q?: string } = {}
 ) {
-  const { filialId, q } = opts;
+  const { filialIds, q } = opts;
   const rows = await db
     .select({
       id: vehicles.id,
@@ -1055,7 +1078,9 @@ export async function listVehiclesForRevisions(
     .where(
       and(
         eq(vehicles.active, true),
-        filialId ? eq(vehicles.filialId, filialId) : undefined,
+        filialIds && filialIds.length > 0
+          ? inArray(vehicles.filialId, filialIds)
+          : undefined,
         q
           ? or(ilike(vehicles.placa, `%${q}%`), ilike(vehicles.modelo, `%${q}%`))
           : undefined
@@ -1080,7 +1105,7 @@ export async function listVehicleRevisionsFor(vehicleIds: string[]) {
  * do alerta no dashboard, pra não duplicar essa lógica nos dois lugares.
  */
 export async function listRevisionRows(
-  opts: { filialId?: string; q?: string } = {}
+  opts: { filialIds?: string[]; q?: string } = {}
 ) {
   const vehiclesList = await listVehiclesForRevisions(opts);
   const revisions = await listVehicleRevisionsFor(vehiclesList.map((v) => v.id));
@@ -1112,10 +1137,10 @@ export async function listRevisionRows(
  * das mais urgentes, ordenada pela que falta menos km.
  */
 export async function getRevisionAlertSummary(
-  opts: { filialId?: string; limit?: number } = {}
+  opts: { filialIds?: string[]; limit?: number } = {}
 ) {
-  const { filialId, limit = 8 } = opts;
-  const rows = await listRevisionRows({ filialId });
+  const { filialIds, limit = 8 } = opts;
+  const rows = await listRevisionRows({ filialIds });
   const pendentes = rows.filter((r) => r.status === "PENDENTE");
   const proximas = pendentes
     .filter((r) => r.kmAlvo - r.kmAtual <= REVISION_PROXIMA_LIMIAR_KM)

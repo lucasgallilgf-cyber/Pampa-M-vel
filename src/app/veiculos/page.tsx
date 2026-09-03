@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { requireUser, scopedFilialId } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  resolveFilialFilter,
+} from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import {
@@ -17,9 +21,14 @@ function strParam(v: string | string[] | undefined) {
 
 export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const session = await requireUser(["ADMIN", "GERENTE", "SUPERVISOR"]);
-  const isSupervisor = session.role === "SUPERVISOR";
+  const allowedFilialIds = await getAllowedFilialIds(session);
+  // Fixo: supervisor com 0 ou 1 filial (não há o que escolher).
+  const isFixedFilial = allowedFilialIds !== null && allowedFilialIds.length <= 1;
+  // Múltiplas filiais liberadas pro supervisor: mostra um seletor limitado a elas.
+  const isMultiFilial = allowedFilialIds !== null && allowedFilialIds.length > 1;
   const searchParams = await props.searchParams;
-  const filialId = scopedFilialId(session, strParam(searchParams.filial));
+  const requestedFilial = strParam(searchParams.filial);
+  const filialIds = resolveFilialFilter(allowedFilialIds, requestedFilial);
   const q = strParam(searchParams.q);
   const modelo = strParam(searchParams.modelo);
   const centroCusto = strParam(searchParams.centroCusto);
@@ -30,7 +39,7 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const avarias = strParam(searchParams.avarias) as "com" | "sem" | undefined;
 
   const [vehicles, filiais, modelos, centrosCusto] = await Promise.all([
-    listVehicles({ filialId, q, modelo, centroCusto, status, avarias }),
+    listVehicles({ filialIds, q, modelo, centroCusto, status, avarias }),
     listFiliais(),
     listDistinctModelos(),
     listDistinctCentrosCusto(),
@@ -39,8 +48,13 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
   const canChecklist = session.role === "ADMIN" || session.role === "SUPERVISOR";
   const isAdmin = session.role === "ADMIN";
 
+  const fixedFilialId = isFixedFilial ? allowedFilialIds![0] ?? null : null;
+  const minhasFiliais = allowedFilialIds
+    ? filiais.filter((f) => allowedFilialIds.includes(f.id))
+    : [];
+
   const hasFilter = Boolean(
-    filialId || q || modelo || centroCusto || status || avarias
+    (!isFixedFilial && requestedFilial) || q || modelo || centroCusto || status || avarias
   );
   const totals = {
     conferidos: vehicles.filter((v) => v.conferidoEsteMes).length,
@@ -57,8 +71,18 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
           <p className="text-sm text-slate-500">
             {vehicles.length} veículo{vehicles.length !== 1 && "s"} encontrado
             {vehicles.length !== 1 && "s"}
-            {isSupervisor &&
-              ` · Filial: ${filiais.find((f) => f.id === filialId)?.nome ?? "—"}`}
+            {isFixedFilial &&
+              ` · Filial: ${
+                fixedFilialId
+                  ? filiais.find((f) => f.id === fixedFilialId)?.nome ?? "—"
+                  : "—"
+              }`}
+            {isMultiFilial &&
+              ` · Filial: ${
+                requestedFilial
+                  ? filiais.find((f) => f.id === requestedFilial)?.nome ?? "—"
+                  : "Todas as suas filiais"
+              }`}
           </p>
         </div>
 
@@ -87,12 +111,25 @@ export default async function VeiculosPage(props: PageProps<"/veiculos">) {
             placeholder="Buscar placa ou modelo…"
             className="w-52 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
           />
-          {isSupervisor ? (
-            <input type="hidden" name="filial" value={filialId ?? ""} />
+          {isFixedFilial ? (
+            <input type="hidden" name="filial" value={fixedFilialId ?? ""} />
+          ) : isMultiFilial ? (
+            <select
+              name="filial"
+              defaultValue={requestedFilial ?? ""}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Todas as minhas filiais</option>
+              {minhasFiliais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
           ) : (
             <select
               name="filial"
-              defaultValue={filialId ?? ""}
+              defaultValue={requestedFilial ?? ""}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500"
             >
               <option value="">Todas as filiais</option>

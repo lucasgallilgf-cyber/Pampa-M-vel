@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { requireUser, scopedFilialId } from "@/lib/auth";
+import {
+  requireUser,
+  getAllowedFilialIds,
+  resolveFilialFilter,
+} from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import Badge from "@/components/Badge";
 import { listMaintenanceRecords } from "@/lib/queries";
@@ -18,9 +22,10 @@ export default async function ManutencaoPage(
       ? (searchParams.status as "PENDENTE" | "EM_ANDAMENTO" | "RESOLVIDA")
       : undefined;
 
+  const allowedFilialIds = await getAllowedFilialIds(session);
   const records = await listMaintenanceRecords({
     status,
-    filialId: scopedFilialId(session),
+    filialIds: resolveFilialFilter(allowedFilialIds),
   });
 
   const filters: { label: string; value?: typeof status }[] = [
