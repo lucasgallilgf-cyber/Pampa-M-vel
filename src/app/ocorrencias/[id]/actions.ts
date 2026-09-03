@@ -9,6 +9,7 @@ import { storePhoto } from "@/lib/storage";
 import {
   recordOccurrenceSignature,
   createOrRefreshSignatureLink,
+  reopenOccurrence,
 } from "@/lib/queries";
 
 export type ActionState = { error: string | null; ok?: boolean };
@@ -102,6 +103,22 @@ export async function resolveOccurrenceAction(
     .update(maintenanceRecords)
     .set({ status: "RESOLVIDA", resolvedAt, notes: notes || null })
     .where(eq(maintenanceRecords.occurrenceId, occurrenceId));
+
+  revalidatePath(`/ocorrencias/${occurrenceId}`);
+  revalidatePath("/manutencao");
+  return { error: null, ok: true };
+}
+
+export async function reopenOccurrenceAction(
+  occurrenceId: string
+): Promise<ActionState> {
+  const session = await getSession();
+  if (!session) return { error: "Sessão expirada." };
+  if (!["ADMIN", "SUPERVISOR", "GERENTE"].includes(session.role)) {
+    return { error: "Sem permissão para reabrir ocorrências." };
+  }
+
+  await reopenOccurrence(occurrenceId);
 
   revalidatePath(`/ocorrencias/${occurrenceId}`);
   revalidatePath("/manutencao");

@@ -694,6 +694,36 @@ export async function recordOccurrenceSignature(params: {
 }
 
 /**
+ * Reabre uma ocorrência marcada como resolvida por engano (ou porque o
+ * problema voltou) — volta pro status que faz sentido dado o que já foi
+ * assinado (EM_ANDAMENTO se as 3 assinaturas já existem, senão PENDENTE) e
+ * limpa a data de resolução. O registro de manutenção correspondente
+ * acompanha o mesmo status, pra sumir da lista de "Resolvidas" em
+ * Manutenção. As observações da resolução anterior ficam salvas (não são
+ * apagadas), caso a ocorrência seja resolvida de novo depois.
+ */
+export async function reopenOccurrence(occurrenceId: string) {
+  const sigs = await db
+    .select({ role: signatures.role })
+    .from(signatures)
+    .where(eq(signatures.occurrenceId, occurrenceId));
+  const allSigned = SIGNATURE_ORDER.every((r) =>
+    sigs.some((s) => s.role === r)
+  );
+  const newStatus = allSigned ? "EM_ANDAMENTO" : "PENDENTE";
+
+  await db
+    .update(occurrences)
+    .set({ status: newStatus, resolvedAt: null })
+    .where(eq(occurrences.id, occurrenceId));
+
+  await db
+    .update(maintenanceRecords)
+    .set({ status: newStatus, resolvedAt: null })
+    .where(eq(maintenanceRecords.occurrenceId, occurrenceId));
+}
+
+/**
  * Cria (ou substitui, se já existir uma pra essa etapa) um link de
  * assinatura sem login pra mandar por WhatsApp. Válido por 30 dias.
  */

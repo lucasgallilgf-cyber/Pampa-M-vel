@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { signOccurrenceAction, resolveOccurrenceAction } from "./actions";
+import {
+  signOccurrenceAction,
+  resolveOccurrenceAction,
+  reopenOccurrenceAction,
+} from "./actions";
 import { SIGNATURE_ORDER, SIGNATURE_ROLE_LABELS } from "@/lib/domain";
 import type { SessionPayload } from "@/lib/auth";
 import SignaturePad from "./SignaturePad";
@@ -108,9 +112,30 @@ export default function SignaturePanel({
     });
   }
 
+  function handleReopen() {
+    if (
+      !confirm(
+        "Reabrir esta ocorrência? Ela volta a aparecer como pendente/em andamento nas listas de Avarias e Manutenção."
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setPendingRole("reopen");
+    startTransition(async () => {
+      const res = await reopenOccurrenceAction(occurrenceId);
+      setPendingRole(null);
+      if (res.error) setError(res.error);
+      else router.refresh();
+    });
+  }
+
   const canResolve =
     ["ADMIN", "SUPERVISOR", "GERENTE"].includes(session.role) &&
     status !== "RESOLVIDA";
+  const canReopen =
+    ["ADMIN", "SUPERVISOR", "GERENTE"].includes(session.role) &&
+    status === "RESOLVIDA";
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -245,6 +270,18 @@ export default function SignaturePanel({
             className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
           >
             {pendingRole === "resolve" ? "Salvando…" : "Marcar como resolvida"}
+          </button>
+        </div>
+      )}
+
+      {canReopen && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <button
+            onClick={handleReopen}
+            disabled={isPending}
+            className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+          >
+            {pendingRole === "reopen" ? "Reabrindo…" : "Marcar como não resolvida"}
           </button>
         </div>
       )}
