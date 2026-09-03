@@ -14,6 +14,8 @@ import {
 } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import { storePhoto } from "@/lib/storage";
+import { upsertVehicleRevision } from "@/lib/queries";
+import { REVISION_INTERVAL_KM } from "@/lib/domain";
 
 type ItemStatus = "OK" | "AVARIA" | "NAO_APLICAVEL";
 
@@ -149,6 +151,25 @@ async function submitChecklist(formData: FormData) {
     .update(vehicles)
     .set({ kmAtual: km })
     .where(eq(vehicles.id, vehicleId));
+
+  const revisaoFeita = formData.get("revisaoFeita")?.toString() === "on";
+  if (revisaoFeita) {
+    const kmAlvoRaw = formData.get("revisaoKmAlvo")?.toString();
+    const kmAlvo = kmAlvoRaw ? parseInt(kmAlvoRaw, 10) : NaN;
+    if (!Number.isNaN(kmAlvo) && kmAlvo > 0 && kmAlvo % REVISION_INTERVAL_KM === 0) {
+      const revisaoObservacao =
+        formData.get("revisaoObservacao")?.toString().trim() || null;
+      await upsertVehicleRevision({
+        vehicleId,
+        kmAlvo,
+        status: "FEITO",
+        dataRevisao: new Date(),
+        kmRevisao: km,
+        observacao: revisaoObservacao,
+        updatedById: session.id,
+      });
+    }
+  }
 
   if (occurrenceId) {
     redirect(`/ocorrencias/${occurrenceId}`);

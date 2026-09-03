@@ -104,6 +104,17 @@ export function nextRevisionKm(kmAtual: number): number {
   );
 }
 
+// Marcos de revisão oferecidos pra marcação manual (no checklist e no
+// painel de Revisões): 10k, 20k, 30k... até 300k.
+export const REVISION_MILESTONES: number[] = Array.from(
+  { length: 30 },
+  (_, i) => (i + 1) * REVISION_INTERVAL_KM
+);
+
+// Distância (em km) até o próximo marco a partir da qual ele já entra como
+// "próxima revisão" nos alertas (painel de Revisões e dashboard).
+export const REVISION_PROXIMA_LIMIAR_KM = 2000;
+
 export function formatKm(km: number): string {
   return `${km.toLocaleString("pt-BR")} km`;
 }

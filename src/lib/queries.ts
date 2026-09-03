@@ -17,7 +17,13 @@ import {
 } from "@/db/schema";
 import { alias } from "drizzle-orm/pg-core";
 import { eq, and, gte, lt, sql, desc, or, ilike, ne, inArray } from "drizzle-orm";
-import { currentMonthRange, SIGNATURE_ORDER, SIGNATURE_ROLE_LABELS } from "./domain";
+import {
+  currentMonthRange,
+  SIGNATURE_ORDER,
+  SIGNATURE_ROLE_LABELS,
+  nextRevisionKm,
+  REVISION_PROXIMA_LIMIAR_KM,
+} from "./domain";
 import { createToken } from "./id";
 
 export async function listVehicles(
@@ -1066,6 +1072,60 @@ export async function listVehicleRevisionsFor(vehicleIds: string[]) {
     .select()
     .from(vehicleRevisions)
     .where(inArray(vehicleRevisions.vehicleId, vehicleIds));
+}
+
+/**
+ * Uma linha por veículo com o marco de revisão atual (calculado a partir do
+ * kmAtual) e o status desse marco — base tanto do painel de Revisões quanto
+ * do alerta no dashboard, pra não duplicar essa lógica nos dois lugares.
+ */
+export async function listRevisionRows(
+  opts: { filialId?: string; q?: string } = {}
+) {
+  const vehiclesList = await listVehiclesForRevisions(opts);
+  const revisions = await listVehicleRevisionsFor(vehiclesList.map((v) => v.id));
+
+  return vehiclesList.map((v) => {
+    const kmAlvo = nextRevisionKm(v.kmAtual);
+    const rev = revisions.find(
+      (r) => r.vehicleId === v.id && r.kmAlvo === kmAlvo
+    );
+    return {
+      vehicleId: v.id,
+      placa: v.placa,
+      modelo: v.modelo,
+      marca: v.marca,
+      filialNome: v.filialNome,
+      kmAtual: v.kmAtual,
+      kmAlvo,
+      status: rev?.status ?? ("PENDENTE" as "PENDENTE" | "FEITO"),
+      dataRevisao: rev?.dataRevisao ?? null,
+      kmRevisao: rev?.kmRevisao ?? null,
+      observacao: rev?.observacao ?? null,
+    };
+  });
+}
+
+/**
+ * Resumo pro alerta de revisões no dashboard: quantas estão pendentes,
+ * quantas já estão "próximas" (dentro do limiar de km) e uma lista curta
+ * das mais urgentes, ordenada pela que falta menos km.
+ */
+export async function getRevisionAlertSummary(
+  opts: { filialId?: string; limit?: number } = {}
+) {
+  const { filialId, limit = 8 } = opts;
+  const rows = await listRevisionRows({ filialId });
+  const pendentes = rows.filter((r) => r.status === "PENDENTE");
+  const proximas = pendentes
+    .filter((r) => r.kmAlvo - r.kmAtual <= REVISION_PROXIMA_LIMIAR_KM)
+    .sort((a, b) => a.kmAlvo - a.kmAtual - (b.kmAlvo - b.kmAtual));
+
+  return {
+    totalPendentes: pendentes.length,
+    totalProximas: proximas.length,
+    proximas: proximas.slice(0, limit),
+  };
 }
 
 /**

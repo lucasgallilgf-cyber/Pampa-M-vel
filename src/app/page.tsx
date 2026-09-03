@@ -14,6 +14,7 @@ import {
   listOccurrencesForCondutor,
   listVehiclesForCondutor,
   listFiliais,
+  getRevisionAlertSummary,
 } from "@/lib/queries";
 import {
   formatKm,
@@ -108,6 +109,7 @@ export default async function HomePage(props: PageProps<"/">) {
     byModelo,
     pendingVehicles,
     filiais,
+    revisionAlert,
   ] = await Promise.all([
     getDashboardStats({ filialId }),
     getDashboardByFilial({ filialId }),
@@ -116,6 +118,7 @@ export default async function HomePage(props: PageProps<"/">) {
     getVehicleCountByModelo({ filialId }),
     pendingVehiclesThisMonth(8, { filialId }),
     listFiliais(),
+    getRevisionAlertSummary({ filialId, limit: 8 }),
   ]);
 
   const frotaPorFilial = byFilial
@@ -201,6 +204,11 @@ export default async function HomePage(props: PageProps<"/">) {
           label="Avarias pendentes"
           value={String(stats.avariasPendentes)}
           tone="warning"
+        />
+        <StatTile
+          label="Revisões próximas/pendentes"
+          value={String(revisionAlert.totalProximas)}
+          tone={revisionAlert.totalProximas > 0 ? "critical" : "good"}
         />
       </div>
 
@@ -312,6 +320,41 @@ export default async function HomePage(props: PageProps<"/">) {
           </div>
         </section>
       </div>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Revisões próximas ou pendentes
+          </h2>
+          <Link
+            href="/revisoes"
+            className="text-xs font-medium text-slate-500 hover:underline"
+          >
+            Ver todas
+          </Link>
+        </div>
+        <div className="space-y-1">
+          {revisionAlert.proximas.length === 0 && (
+            <p className="px-1 py-4 text-center text-sm text-slate-400">
+              Nenhuma revisão próxima no momento.
+            </p>
+          )}
+          {revisionAlert.proximas.map((r) => (
+            <Link
+              key={r.vehicleId}
+              href={`/veiculos/${r.vehicleId}`}
+              className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              <span className="font-medium text-slate-800">{r.placa}</span>
+              <span className="text-slate-500">
+                {r.modelo} · {r.filialNome} · faltam{" "}
+                {formatKm(Math.max(0, r.kmAlvo - r.kmAtual))} para{" "}
+                {formatKm(r.kmAlvo)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </AppShell>
   );
 }

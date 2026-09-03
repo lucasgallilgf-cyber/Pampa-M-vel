@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { submitChecklistAction, ChecklistFormState } from "./actions";
-import { formatKm } from "@/lib/domain";
+import { formatKm, nextRevisionKm, REVISION_MILESTONES } from "@/lib/domain";
 
 type ItemDef = { id: string; label: string; category: string; order: number };
 type Vehicle = {
@@ -92,6 +92,17 @@ export default function ChecklistForm({
   const [relato, setRelato] = useState("");
   const [isCompressing, setIsCompressing] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [revisaoFeita, setRevisaoFeita] = useState(false);
+  const [revisaoKmOverride, setRevisaoKmOverride] = useState<number | null>(
+    null
+  );
+  const [revisaoObservacao, setRevisaoObservacao] = useState("");
+
+  const kmNum = parseInt(km, 10);
+  const revisaoKmSugerido = nextRevisionKm(
+    Number.isNaN(kmNum) ? vehicle.kmAtual : kmNum
+  );
+  const revisaoKm = revisaoKmOverride ?? revisaoKmSugerido;
 
   const avariaCount = useMemo(
     () => Object.values(items).filter((i) => i.status === "AVARIA").length,
@@ -205,6 +216,59 @@ export default function ChecklistForm({
         <p className="mt-1 text-xs text-slate-500">
           Última registrada: {formatKm(vehicle.kmAtual)}
         </p>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={revisaoFeita}
+            onChange={(e) => setRevisaoFeita(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          Revisão preventiva feita nesta conferência
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          Marque se o veículo passou pela revisão de manutenção agora — isso
+          atualiza o painel de Revisões e já calcula o próximo marco (10 em
+          10 mil km).
+        </p>
+
+        {revisaoFeita && (
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="revisaoFeita" value="on" />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Km da revisão
+              </label>
+              <select
+                name="revisaoKmAlvo"
+                value={revisaoKm}
+                onChange={(e) => setRevisaoKmOverride(Number(e.target.value))}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+              >
+                {REVISION_MILESTONES.map((m) => (
+                  <option key={m} value={m}>
+                    {formatKm(m)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[220px] flex-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Observação (opcional)
+              </label>
+              <input
+                type="text"
+                name="revisaoObservacao"
+                value={revisaoObservacao}
+                onChange={(e) => setRevisaoObservacao(e.target.value)}
+                placeholder="Ex: troca de óleo e filtros na oficina X"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">

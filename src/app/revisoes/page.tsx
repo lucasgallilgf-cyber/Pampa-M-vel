@@ -2,19 +2,9 @@ import Link from "next/link";
 import { requireUser, scopedFilialId } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
 import StatTile from "@/components/StatTile";
-import {
-  listVehiclesForRevisions,
-  listVehicleRevisionsFor,
-  listFiliais,
-} from "@/lib/queries";
-import { formatKm, nextRevisionKm } from "@/lib/domain";
+import { listRevisionRows, listFiliais } from "@/lib/queries";
+import { formatKm, REVISION_PROXIMA_LIMIAR_KM } from "@/lib/domain";
 import RevisionRow, { RevisionRowData } from "./RevisionRow";
-
-// Veículo é considerado "próximo da revisão" quando faltam até esta
-// quilometragem pro marco de 10k mais próximo — usado só pro indicador do
-// topo, pra sinalizar o que precisa ser agendado logo, mesmo ainda dentro
-// do prazo.
-const PROXIMA_REVISAO_LIMIAR_KM = 2000;
 
 function strParam(v: string | string[] | undefined) {
   return typeof v === "string" && v !== "" ? v : undefined;
@@ -33,31 +23,12 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
   const periodoInicio = strParam(searchParams.inicio);
   const periodoFim = strParam(searchParams.fim);
 
-  const [vehicles, filiais] = await Promise.all([
-    listVehiclesForRevisions({ filialId, q }),
+  const [vehiclesRows, filiais] = await Promise.all([
+    listRevisionRows({ filialId, q }),
     listFiliais(),
   ]);
-  const revisions = await listVehicleRevisionsFor(vehicles.map((v) => v.id));
 
-  let rows: RevisionRowData[] = vehicles.map((v) => {
-    const kmAlvo = nextRevisionKm(v.kmAtual);
-    const rev = revisions.find(
-      (r) => r.vehicleId === v.id && r.kmAlvo === kmAlvo
-    );
-    return {
-      vehicleId: v.id,
-      placa: v.placa,
-      modelo: v.modelo,
-      marca: v.marca,
-      filialNome: v.filialNome,
-      kmAtual: v.kmAtual,
-      kmAlvo,
-      status: rev?.status ?? "PENDENTE",
-      dataRevisao: rev?.dataRevisao ?? null,
-      kmRevisao: rev?.kmRevisao ?? null,
-      observacao: rev?.observacao ?? null,
-    };
-  });
+  let rows: RevisionRowData[] = vehiclesRows;
 
   if (status) {
     rows = rows.filter((r) => r.status === status);
@@ -82,7 +53,7 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
     proximas: rows.filter(
       (r) =>
         r.status === "PENDENTE" &&
-        r.kmAlvo - r.kmAtual <= PROXIMA_REVISAO_LIMIAR_KM
+        r.kmAlvo - r.kmAtual <= REVISION_PROXIMA_LIMIAR_KM
     ).length,
   };
 
@@ -174,7 +145,7 @@ export default async function RevisoesPage(props: PageProps<"/revisoes">) {
           tone="good"
         />
         <StatTile
-          label={`Próximas (≤ ${formatKm(PROXIMA_REVISAO_LIMIAR_KM)})`}
+          label={`Próximas (≤ ${formatKm(REVISION_PROXIMA_LIMIAR_KM)})`}
           value={String(totals.proximas)}
           tone="critical"
         />
