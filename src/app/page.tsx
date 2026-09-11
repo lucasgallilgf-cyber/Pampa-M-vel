@@ -142,6 +142,10 @@ export default async function HomePage(props: PageProps<"/">) {
     label: m.modelo,
     count: m.total,
   }));
+  const filiaisPendentes = byFilial
+    .filter((f) => f.pendentes > 0)
+    .map((f) => ({ label: f.filialNome, count: f.pendentes }))
+    .sort((a, b) => b.count - a.count);
 
   return (
     <AppShell session={session}>
@@ -242,13 +246,26 @@ export default async function HomePage(props: PageProps<"/">) {
         </section>
       </div>
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Filiais com checklist pendente
+          </h2>
+          <CountBarList
+            items={filiaisPendentes}
+            color="#eb6834"
+            emptyMessage="Todas as filiais em dia com o checklist do mês."
+          />
+        </section>
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Frota por filial
           </h2>
           <CountBarList items={frotaPorFilial} />
         </section>
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Frota por centro de custo

@@ -8,9 +8,12 @@ type Item = { label: string; count: number };
 export default function CountBarList({
   items,
   emptyMessage = "Sem dados.",
+  color = "#2a78d6",
 }: {
   items: Item[];
   emptyMessage?: string;
+  /** Cor da barra (hex) — padrão azul, usado por ex. em "pendentes" com laranja. */
+  color?: string;
 }) {
   if (items.length === 0) {
     return (
@@ -34,8 +37,8 @@ export default function CountBarList({
           </span>
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-[#2a78d6]"
-              style={{ width: `${(item.count / max) * 100}%` }}
+              className="h-full rounded-full"
+              style={{ width: `${(item.count / max) * 100}%`, backgroundColor: color }}
             />
           </div>
           <span className="w-8 shrink-0 text-right text-sm font-semibold text-slate-800">
