@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { upload } from "@vercel/blob/client";
+import { compressImage } from "@/lib/imageCompress";
 import { submitChecklistAction, ChecklistFormState } from "./actions";
 import { formatKm, nextRevisionKm, REVISION_MILESTONES } from "@/lib/domain";
 
@@ -19,56 +21,16 @@ type ItemUiState = { status: "OK" | "AVARIA"; notes: string; photos: File[] };
 
 const initialState: ChecklistFormState = { error: null };
 
-// Fotos tiradas direto da câmera do celular costumam vir com vários MB cada
-// (às vezes 8-10MB). Enviar várias assim de uma vez em uma conexão de
-// celular é lento e propenso a falhar no meio do envio (aparecendo como
-// "página não carregou", sem nenhum erro do lado do servidor). Por isso,
-// antes de montar o FormData de envio, cada foto é redimensionada e
-// recomprimida no próprio aparelho — isso normalmente reduz o arquivo para
-// algumas dezenas/centenas de KB, sem perda perceptível de qualidade para o
-// propósito de registrar o estado do veículo.
-//
-// O checklist tem ~26 itens — mesmo comprimida, uma foto em quase todo item
-// ainda pode somar mais do que o limite de ~4,5MB que a Vercel aplica no
-// nível de rede (antes mesmo de o envio chegar no código do site). Por isso
-// o tamanho aqui é mais conservador que o usado na importação de planilha
-// (que lida com um único arquivo), e o total após comprimir também é
-// checado antes de enviar (ver MAX_TOTAL_UPLOAD_BYTES no handleSubmit).
-async function compressImage(
-  file: File,
-  maxDim = 1280,
-  quality = 0.6
-): Promise<File> {
-  try {
-    if (typeof createImageBitmap !== "function") return file;
-    const bitmap = await createImageBitmap(file, {
-      imageOrientation: "from-image",
-    } as ImageBitmapOptions);
-
-    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-    const targetW = Math.max(1, Math.round(bitmap.width * scale));
-    const targetH = Math.max(1, Math.round(bitmap.height * scale));
-
-    const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality)
-    );
-    if (!blob || blob.size >= file.size) return file;
-
-    const newName = file.name.replace(/\.\w+$/, "") + ".jpg";
-    return new File([blob], newName, { type: "image/jpeg" });
-  } catch {
-    // Se algo der errado ao comprimir (formato não suportado etc.), envia o
-    // arquivo original em vez de bloquear o checklist.
-    return file;
-  }
-}
+// Fotos da câmera do celular costumam vir com vários MB cada. Antes de
+// enviar, cada foto é reduzida no próprio aparelho até caber num tamanho
+// alvo (ver compressImage) — fotos de item OK ficam bem leves (são só
+// registro), fotos de avaria mantêm mais detalhe. Depois, cada foto vai
+// DIRETO do celular para o armazenamento (Vercel Blob), uma a uma, sem
+// passar pelo servidor do site — então não existe mais limite de ~4,5MB por
+// checklist; o formulário só envia as URLs das fotos já salvas.
+const TARGET_BYTES_OK = 160 * 1024;
+const TARGET_BYTES_AVARIA = 350 * 1024;
+const UPLOAD_CONCURRENCY = 3;
 
 export default function ChecklistForm({
   vehicle,
@@ -91,6 +53,13 @@ export default function ChecklistForm({
   const [km, setKm] = useState(String(vehicle.kmAtual));
   const [relato, setRelato] = useState("");
   const [isCompressing, setIsCompressing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  // Fotos já enviadas (por arquivo) — se o envio falhar no meio e o usuário
+  // tentar de novo, só reenvia o que faltou.
+  const uploadedUrls = useRef(new WeakMap<File, string>());
   const [clientError, setClientError] = useState<string | null>(null);
   const [revisaoFeita, setRevisaoFeita] = useState(false);
   const [revisaoKmOverride, setRevisaoKmOverride] = useState<number | null>(
@@ -119,11 +88,6 @@ export default function ChecklistForm({
     setItems((prev) => ({ ...prev, [id]: { ...prev[id], photos } }));
   }
 
-  // Margem de segurança abaixo do limite de ~4,5MB que a Vercel aplica no
-  // nível de rede para o corpo inteiro da requisição (nome dos campos,
-  // fronteiras do multipart etc. também contam, por isso a margem).
-  const MAX_TOTAL_UPLOAD_BYTES = 3.5 * 1024 * 1024;
-
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setClientError(null);
@@ -148,36 +112,82 @@ export default function ChecklistForm({
     const original = new FormData(e.currentTarget);
     setIsCompressing(true);
     try {
-      const compressed = new FormData();
-      let totalPhotoBytes = 0;
-      for (const [key, value] of original.entries()) {
-        compressed.append(key, value);
-      }
-
+      const jobs: { file: File; avaria: boolean; defId: string }[] = [];
       for (const def of itemDefs) {
         for (const file of items[def.id].photos) {
-          const compressedFile = await compressImage(file);
-          totalPhotoBytes += compressedFile.size;
-          compressed.append(`photos_${def.id}`, compressedFile);
+          jobs.push({
+            file,
+            avaria: items[def.id].status === "AVARIA",
+            defId: def.id,
+          });
         }
       }
 
-      if (totalPhotoBytes > MAX_TOTAL_UPLOAD_BYTES) {
+      const pending = jobs.filter((j) => !uploadedUrls.current.has(j.file));
+      let done = jobs.length - pending.length;
+      setUploadProgress(jobs.length > 0 ? { done, total: jobs.length } : null);
+
+      let failed: string | null = null;
+      let next = 0;
+      async function worker() {
+        while (failed === null && next < pending.length) {
+          const job = pending[next++];
+          try {
+            const small = await compressImage(
+              job.file,
+              job.avaria ? TARGET_BYTES_AVARIA : TARGET_BYTES_OK
+            );
+            const path = `inspecoes/${vehicle.id}/${crypto.randomUUID()}.jpg`;
+            let lastErr: unknown = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const blob = await upload(path, small, {
+                  access: "public",
+                  handleUploadUrl: "/api/blob-upload",
+                  contentType: small.type || "image/jpeg",
+                });
+                uploadedUrls.current.set(job.file, blob.url);
+                lastErr = null;
+                break;
+              } catch (err) {
+                lastErr = err;
+              }
+            }
+            if (lastErr) throw lastErr;
+            done += 1;
+            setUploadProgress({ done, total: jobs.length });
+          } catch (err) {
+            failed =
+              err instanceof Error && err.message
+                ? err.message
+                : "falha de conexão";
+          }
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_CONCURRENCY, pending.length) }, worker)
+      );
+
+      if (failed !== null) {
         setClientError(
-          `As fotos deste checklist somam ${(
-            totalPhotoBytes /
-            1024 /
-            1024
-          ).toFixed(
-            1
-          )}MB, mesmo já compactadas — acima do que dá para enviar de uma vez (limite de rede de ~4MB). Remova algumas fotos (principalmente as de itens marcados como OK, que são opcionais) e tente enviar de novo.`
+          `Não foi possível enviar todas as fotos (${failed}). As que já subiram ficam guardadas — verifique a conexão e toque em "Concluir conferência" de novo.`
         );
         return;
       }
 
-      formAction(compressed);
+      const payload = new FormData();
+      for (const [key, value] of original.entries()) {
+        payload.append(key, value);
+      }
+      for (const job of jobs) {
+        const url = uploadedUrls.current.get(job.file);
+        if (url) payload.append(`photoUrls_${job.defId}`, url);
+      }
+
+      formAction(payload);
     } finally {
       setIsCompressing(false);
+      setUploadProgress(null);
     }
   }
 
@@ -399,7 +409,11 @@ export default function ChecklistForm({
             </span>
           )}
         </div>
-        <SubmitButton compressing={isCompressing} pending={isPending} />
+        <SubmitButton
+          compressing={isCompressing}
+          pending={isPending}
+          progress={uploadProgress}
+        />
       </div>
 
       {clientError && (
@@ -500,9 +514,11 @@ function PhotoPicker({
 function SubmitButton({
   compressing,
   pending,
+  progress,
 }: {
   compressing: boolean;
   pending: boolean;
+  progress: { done: number; total: number } | null;
 }) {
   const busy = compressing || pending;
   return (
@@ -511,7 +527,13 @@ function SubmitButton({
       disabled={busy}
       className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
     >
-      {compressing ? "Preparando fotos…" : pending ? "Salvando…" : "Concluir conferência"}
+      {compressing
+        ? progress
+          ? `Enviando fotos ${progress.done}/${progress.total}…`
+          : "Preparando…"
+        : pending
+          ? "Salvando…"
+          : "Concluir conferência"}
     </button>
   );
 }

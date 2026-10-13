@@ -1,16 +1,31 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getSession, requireUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// Mesmo critério do storage.ts: o store público (BLOB2_*) tem prioridade.
+// handleUpload usa BLOB_READ_WRITE_TOKEN por padrão, que pode ser o do store
+// antigo (privado) — por isso o token é passado explicitamente.
+const BLOB_TOKEN =
+  process.env.BLOB2_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
+
+const PHOTO_ROLES = ["ADMIN", "SUPERVISOR", "CONDUTOR"];
+// Fotos já chegam comprimidas (~100-400KB) do navegador; o teto alto só
+// cobre o caso de a compressão ter falhado e a original ir direto.
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
 /**
- * Issues short-lived client tokens so the browser can upload files straight
- * to Vercel Blob storage, bypassing Vercel's ~4.5MB request body limit for
- * serverless functions (that limit applies to this route's own tiny JSON
- * exchange, not to the file — the file itself never passes through here).
- * Used by the planilha (spreadsheet) import flow.
+ * Emite tokens de curta duração para o navegador enviar arquivos direto ao
+ * Vercel Blob, sem passar pelo limite de ~4,5MB de corpo de requisição das
+ * funções serverless (esse limite vale pra esta rota, que só troca um JSON
+ * pequeno — o arquivo em si nunca passa por aqui).
+ *
+ * Dois usos:
+ *  - fotos do checklist (pathname "inspecoes/..."): ADMIN, SUPERVISOR e
+ *    CONDUTOR, só imagens;
+ *  - importação de planilha: só ADMIN, só planilhas.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -19,7 +34,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => {
+      token: BLOB_TOKEN,
+      onBeforeGenerateToken: async (pathname) => {
+        if (pathname.startsWith("inspecoes/")) {
+          const session = await getSession();
+          if (!session || !PHOTO_ROLES.includes(session.role)) {
+            throw new Error("Não autorizado a enviar fotos.");
+          }
+          return {
+            allowedContentTypes: [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+            ],
+            addRandomSuffix: true,
+            maximumSizeInBytes: MAX_PHOTO_BYTES,
+          };
+        }
+
         await requireUser(["ADMIN"]);
         return {
           allowedContentTypes: [
@@ -31,10 +65,6 @@ export async function POST(request: Request): Promise<NextResponse> {
           addRandomSuffix: true,
           maximumSizeInBytes: 20 * 1024 * 1024,
         };
-      },
-      onUploadCompleted: async () => {
-        // No server-side action needed here — the browser gets the blob URL
-        // back directly and hands it to importVehiclesFromUrlAction.
       },
     });
 

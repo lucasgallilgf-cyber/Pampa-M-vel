@@ -13,13 +13,29 @@ import {
   checklistItemDefs,
 } from "@/db/schema";
 import { getSession } from "@/lib/auth";
-import { storePhoto } from "@/lib/storage";
 import { upsertVehicleRevision } from "@/lib/queries";
 import { REVISION_INTERVAL_KM } from "@/lib/domain";
 
 type ItemStatus = "OK" | "AVARIA" | "NAO_APLICAVEL";
 
 export type ChecklistFormState = { error: string | null };
+
+// As fotos são enviadas direto do navegador para o Vercel Blob (ver
+// /api/blob-upload) antes de chegar aqui — esta ação só recebe as URLs.
+// Como o campo vem do cliente, só aceita URLs do nosso próprio store público
+// e dentro da pasta deste veículo, pra ninguém anexar link arbitrário.
+function isValidPhotoUrl(raw: string, vehicleId: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.endsWith(".public.blob.vercel-storage.com") &&
+      url.pathname.startsWith(`/inspecoes/${vehicleId}/`)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function submitChecklistAction(
   _prevState: ChecklistFormState,
@@ -74,17 +90,18 @@ async function submitChecklist(formData: FormData) {
     label: string;
     status: ItemStatus;
     notes: string | null;
-    files: File[];
+    photoUrls: string[];
   };
 
   const pending: Pending[] = itemDefs.map((def) => {
     const status = (formData.get(`status_${def.id}`)?.toString() ??
       "OK") as ItemStatus;
     const notes = formData.get(`notes_${def.id}`)?.toString().trim() || null;
-    const files = formData
-      .getAll(`photos_${def.id}`)
-      .filter((f): f is File => f instanceof File && f.size > 0);
-    return { itemDefId: def.id, label: def.label, status, notes, files };
+    const photoUrls = formData
+      .getAll(`photoUrls_${def.id}`)
+      .map((v) => v.toString())
+      .filter((u) => isValidPhotoUrl(u, vehicleId));
+    return { itemDefId: def.id, label: def.label, status, notes, photoUrls };
   });
 
   const avariaItems = pending.filter((p) => p.status === "AVARIA");
@@ -137,8 +154,7 @@ async function submitChecklist(formData: FormData) {
       })
       .returning();
 
-    for (const file of p.files) {
-      const url = await storePhoto(file, `inspecoes/${inspection.id}`);
+    for (const url of p.photoUrls) {
       await db.insert(photos).values({
         url,
         inspectionItemId: item.id,
