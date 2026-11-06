@@ -18,7 +18,7 @@ export type SessionPayload = {
   email: string;
   role: "ADMIN" | "GERENTE" | "SUPERVISOR" | "CONDUTOR";
   filialId: string | null;
-  portalFilialId?: string | null;
+  portalFilialIds?: string[] | null;
 };
 
 export async function signSession(payload: SessionPayload): Promise<string> {
@@ -84,7 +84,7 @@ const NO_FILIAL_SENTINEL = "__sem_filial_cadastrada__";
 export async function getAllowedFilialIds(
   session: SessionPayload
 ): Promise<string[] | null> {
-  if (session.portalFilialId) return [session.portalFilialId];
+  if (session.portalFilialIds?.length) return session.portalFilialIds;
   if (session.role !== "SUPERVISOR") return null;
   const extras = await listUserFiliaisIds(session.id);
   const ids = new Set(extras);
