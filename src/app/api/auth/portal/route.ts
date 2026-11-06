@@ -55,7 +55,9 @@ export async function GET(req: NextRequest) {
 
   // Filial do login no portal → filial do Frota (compara nome ou código, sem acento/maiúsculas)
   const todas = await db.select({ id: filiais.id, nome: filiais.nome, codigo: filiais.codigo }).from(filiais);
-  const filial = todas.find((f) => norm(f.nome) === norm(filialNome) || norm(f.codigo) === norm(filialNome));
+  const sigla = norm(filialNome.split("—")[0]);
+  const doLogin = todas.filter((f) => [sigla, "jcb " + sigla, norm(filialNome)].includes(norm(f.nome)) || norm(f.codigo) === sigla);
+  const filial = doLogin[0];
   if (!filial && !portalAdmin) {
     return erro(`A filial "${filialNome}" do portal não existe no Controle de Frota. Os nomes das filiais precisam ser iguais nos dois sistemas.`);
   }
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
     email: user.email,
     role: user.role,
     filialId: user.filialId,
-    portalFilialId: portalAdmin ? null : filial!.id,
+    portalFilialIds: portalAdmin ? null : doLogin.map((f) => f.id),
   });
 
   const res = NextResponse.redirect(new URL(user.role === "CONDUTOR" ? "/meu-veiculo" : "/", req.url));
